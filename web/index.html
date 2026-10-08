@@ -20,13 +20,18 @@
       <h1>หมอท้อง</h1>
       <p class="sub">AI Thai Postnatal Care</p>
       <form id="lform" autocomplete="off">
-        <label>HN<input name="hn" required maxlength="20" autocapitalize="characters" inputmode="text"></label>
-        <label>ชื่อของคุณ (บางส่วนก็ได้)<input name="namePart" required maxlength="60"></label>
-        <label>สแกนใบหน้า<input name="face" type="file" accept="image/*" capture="user" required></label>
-        <div class="row" style="margin:0 0 10px"><img id="lprev" class="lprev" hidden alt=""><span id="lstat" class="muted"></span></div>
-        <button class="primary" id="lbtn">เข้าสู่ระบบ</button>
+        <label>HN หรือ เบอร์โทรศัพท์<input name="id" required maxlength="30" autocapitalize="characters" autocomplete="off" inputmode="text"></label>
+        <label>ชื่อของคุณ (บางส่วนก็ได้)<input name="namePart" required maxlength="60" autocomplete="off"></label>
+        <button class="primary" id="lbtn">ถัดไป</button>
         <div id="lmsg" class="lmsg" role="alert"></div>
       </form>
+      <div id="lstep2" class="lcam" hidden>
+        <h2>สแกนใบหน้า</h2>
+        <p class="muted">มองตรงที่กล้อง แล้วกะพริบตา 1 ครั้ง (สแกนสดจากกล้อง ไม่มีการอัปโหลดรูป)</p>
+        <div id="camwrap"></div>
+        <div id="lmsg2" class="lmsg" role="alert"></div>
+        <div class="row" style="justify-content:center;gap:8px;display:flex"><button class="primary alt" id="lretry" type="button" hidden>ลองอีกครั้ง</button><button class="primary alt" id="lback" type="button">ย้อนกลับ</button></div>
+      </div>
       <p class="muted" style="text-align:center">ไม่มี HN หรือเข้าไม่ได้ กรุณาติดต่อเจ้าหน้าที่</p>
     </div>
   </section>
@@ -211,6 +216,7 @@
 <script src="risk-engine.js"></script>
 <script src="ttm.js"></script>
 <script src="herbs.js"></script>
+<script src="liveness.js"></script>
 <script src="face.js"></script>
 <script src="app.js"></script>
 </body>

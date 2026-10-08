@@ -162,3 +162,8 @@ tr.pt td[data-l="วันหลังคลอด"]::before{content:"หลั�
 .kbi{padding:12px 14px}.kbi summary{cursor:pointer;list-style:none}.kbi summary::-webkit-details-marker{display:none}
 .kbi p{margin:8px 0 0;white-space:pre-wrap;font-size:.92rem}
 input[type=file]{padding:8px;min-height:46px;background:#fffafb}
+
+.lcam{background:#fff;border:1.5px solid var(--gold-l);border-radius:var(--r);padding:16px;box-shadow:var(--shadow);margin-bottom:14px;text-align:center}
+.lcam h2{margin-bottom:2px}
+.primary.alt{background:#fff;color:var(--pink-d);border:1.5px solid var(--pink);box-shadow:none;width:auto;padding:0 18px}
+#login.scanning .logo,#login.scanning h1,#login.scanning .sub{display:none}#login.scanning .lbox{padding-top:6px}

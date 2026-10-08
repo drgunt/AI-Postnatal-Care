@@ -48,16 +48,16 @@ function makeCipher(key) {
 
 // ---- sessions (in memory) ----
 const sessions = new Map();
-function createSession(data, ttlMs) {
+function createSession(data, ttlMs, sliding = true) {
   const token = crypto.randomBytes(32).toString('base64url');
-  sessions.set(token, { ...data, expires: Date.now() + ttlMs, ttlMs });
+  sessions.set(token, { ...data, expires: Date.now() + ttlMs, ttlMs, sliding });
   return token;
 }
 function getSession(token) {
   const s = token && sessions.get(token);
   if (!s) return null;
   if (s.expires < Date.now()) { sessions.delete(token); return null; }
-  s.expires = Date.now() + s.ttlMs;   // sliding
+  if (s.sliding) s.expires = Date.now() + s.ttlMs;
   return s;
 }
 function destroySession(token) { sessions.delete(token); }

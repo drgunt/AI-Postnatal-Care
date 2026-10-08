@@ -18,24 +18,34 @@ Admin.boot('admin1', 'ผู้ดูแลระบบ (admin1) — เข้�
         <label>ชื่อ-นามสกุล<input name="name" value="${esc(e.name)}" required></label>
         <label>วันที่คลอด<input name="deliveryDate" type="date" value="${esc(e.deliveryDate)}" max="${new Date().toISOString().slice(0, 10)}" required></label>
         <label>ลักษณะการคลอด<select name="deliveryMode"><option value="vaginal" ${e.deliveryMode === 'vaginal' ? 'selected' : ''}>คลอดทางช่องคลอด</option><option value="cesarean" ${e.deliveryMode === 'cesarean' ? 'selected' : ''}>ผ่าตัดคลอด</option></select></label>
+        <label>เบอร์โทรศัพท์ (ใช้เข้าระบบแทน HN ได้)<input name="phone" value="${esc(e.phone)}" inputmode="tel" maxlength="20" placeholder="08x-xxx-xxxx"></label>
         <label>LINE userId (ถ้ามี)<input name="lineUserId" value="${esc(e.lineUserId)}" maxlength="60" placeholder="Uxxxxxxxx..."></label>
       </div>
-      <label>ใบหน้า (ถ่ายภาพ/เลือกรูป — ใช้ยืนยันตัวตนตอนคนไข้เข้าระบบ)<input type="file" name="face" accept="image/*" capture="user"></label>
-      <div class="row">${e.id && e.hasFace ? `<img class="photo" src="/api/admin/patients/${e.id}/photo?${Date.now()}" alt="">` : ''}<img class="photo" id="prev" hidden alt=""><span id="fs" class="muted">${e.id ? (e.hasFace ? 'มีข้อมูลใบหน้าแล้ว — เลือกรูปใหม่เพื่อแทนที่' : 'ยังไม่ลงทะเบียนใบหน้า (คนไข้จะเข้าระบบไม่ได้)') : ''}</span></div>
+      <div class="card" style="background:#fffafb"><h3 style="margin-top:0">ใบหน้า (ใช้ยืนยันตัวตนตอนคนไข้เข้าระบบ)</h3>
+        <div class="row"><button type="button" class="btn alt" id="cam">เปิดกล้องสแกนสด (กะพริบตา 1 ครั้ง)</button><span class="muted">หรือ</span><input type="file" name="face" accept="image/*" style="max-width:260px"></div>
+        <div id="camwrap" style="margin-top:10px"></div><div class="row">${e.id && e.hasFace ? `<img class="photo" src="/api/admin/patients/${e.id}/photo?${Date.now()}" alt="">` : ''}<img class="photo" id="prev" hidden alt=""><span id="fs" class="muted">${e.id ? (e.hasFace ? 'มีข้อมูลใบหน้าแล้ว — สแกนใหม่เพื่อแทนที่' : 'ยังไม่ลงทะเบียนใบหน้า (คนไข้จะเข้าระบบไม่ได้)') : ''}</span></div></div>
       <div class="row" style="margin-top:10px"><button class="btn">${e.id ? 'บันทึกการแก้ไข' : 'เพิ่มคนไข้'}</button>${e.id ? '<button type="button" class="btn alt" id="cancel">ยกเลิก</button>' : ''}</div><div id="m"></div></form></div>
       <div class="card"><h2>รายชื่อคนไข้ (${list.length})</h2><div style="overflow-x:auto"><table><tr><th>HN</th><th>ชื่อ</th><th>วันคลอด</th><th>การคลอด</th><th>ใบหน้า</th><th>LINE</th><th></th></tr>
-      ${list.map(p => `<tr><td>${esc(p.hn)}</td><td>${esc(p.name)}</td><td>${esc(p.deliveryDate)}</td><td>${p.deliveryMode === 'cesarean' ? 'ผ่าตัด' : 'ช่องคลอด'}</td><td>${p.hasFace ? '✓' : '<span class="err">ยังไม่มี</span>'}</td><td>${p.lineUserId ? '✓' : '-'}</td>
+      ${list.map(p => `<tr><td>${esc(p.hn)}</td><td>${esc(p.name)}<br><span class="muted">${esc(p.phone)}</span></td><td>${esc(p.deliveryDate)}</td><td>${p.deliveryMode === 'cesarean' ? 'ผ่าตัด' : 'ช่องคลอด'}</td><td>${p.hasFace ? '✓' : '<span class="err">ยังไม่มี</span>'}</td><td>${p.lineUserId ? '✓' : '-'}</td>
       <td><button class="btn alt sm" data-e="${p.id}">แก้ไข</button> <button class="btn danger sm" data-d="${p.id}">ลบ</button></td></tr>`).join('') || '<tr><td colspan="7" class="muted">ยังไม่มีคนไข้</td></tr>'}</table></div></div>`;
     let scanned = null;
     const f = $('#pf');
+    let sc = null;
+    const gotFace = (r) => { scanned = r; $('#prev').src = r.photo; $('#prev').hidden = false; const st = $('#fs'); st.textContent = '✓ ตรวจพบใบหน้า 1 ใบหน้า'; st.className = 'ok'; };
+    $('#cam').onclick = async () => {
+      if (sc) sc.cancel(); scanned = null; $('#prev').hidden = true; f.face.value = '';
+      sc = PNCFace.liveScan($('#camwrap'), { liveness: true });
+      try { gotFace(await sc.promise); $('#camwrap').innerHTML = ''; } catch (er) { const st = $('#fs'); st.textContent = er.message; st.className = 'err'; }
+    };
     f.face.onchange = async () => {
+      if (sc) { sc.cancel(); sc = null; $('#camwrap').innerHTML = ''; }
       scanned = null; $('#prev').hidden = true; const st = $('#fs'); st.textContent = 'กำลังตรวจจับใบหน้า...'; st.className = 'muted';
-      try { scanned = await PNCFace.scan(f.face.files[0]); $('#prev').src = scanned.photo; $('#prev').hidden = false; st.textContent = '✓ ตรวจพบใบหน้า 1 ใบหน้า'; st.className = 'ok'; }
+      try { gotFace(await PNCFace.scan(f.face.files[0])); }
       catch (er) { st.textContent = er.message; st.className = 'err'; f.face.value = ''; }
     };
     f.onsubmit = async (ev) => {
       ev.preventDefault();
-      const body = { hn: f.hn.value.trim(), name: f.name.value.trim(), deliveryDate: f.deliveryDate.value, deliveryMode: f.deliveryMode.value, lineUserId: f.lineUserId.value.trim() };
+      const body = { hn: f.hn.value.trim(), name: f.name.value.trim(), deliveryDate: f.deliveryDate.value, deliveryMode: f.deliveryMode.value, lineUserId: f.lineUserId.value.trim(), phone: f.phone.value.trim() };
       if (scanned) { body.descriptor = scanned.descriptor; body.photo = scanned.photo; }
       try { await api(e.id ? 'PUT' : 'POST', e.id ? `/api/admin/patients/${e.id}` : '/api/admin/patients', body); await patients(); flash($('#m'), 'บันทึกแล้ว'); }
       catch (er) { flash($('#m'), er.message, false); }

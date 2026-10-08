@@ -28,6 +28,7 @@ const daysSince = (d) => Math.floor((Date.parse(bkkToday()) - Date.parse(d)) / 8
 const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) && s <= bkkToday() && s >= '2000-01-01';
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const normName = (s) => String(s || '').normalize('NFC').toLowerCase().replace(/\s+/g, '');
+const normPhone = (v) => { let d = String(v || '').replace(/[\s-]/g, ''); if (d.startsWith('+66')) d = '0' + d.slice(3); else if (d.startsWith('66') && d.length === 11) d = '0' + d.slice(2); return /^\d{9,10}$/.test(d) ? d : ''; };
 const isLoopback = (a) => a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
 
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
@@ -71,7 +72,7 @@ async function createApp({ dataDir }) {
   const patientById = (id) => db.patients.find(p => p.id === id);
   const logAs = (ctx, action, detail) => S.audit(ctx.who, action, detail);
 
-  const publicPatient = (p) => ({ id: p.id, hn: p.hn, name: p.name, deliveryDate: p.deliveryDate, deliveryMode: p.deliveryMode, lineUserId: p.lineUserId || '', hasFace: !!p.descriptor, createdAt: p.createdAt });
+  const publicPatient = (p) => ({ id: p.id, hn: p.hn, name: p.name, deliveryDate: p.deliveryDate, deliveryMode: p.deliveryMode, lineUserId: p.lineUserId || '', phone: p.phone || '', hasFace: !!p.descriptor, createdAt: p.createdAt });
   const latestOf = (pid) => db.assessments.filter(a => a.patientId === pid).sort((a, b) => b.at.localeCompare(a.at))[0] || null;
   const secret = (enc) => (enc ? S.cipher.decStr(enc) : '');
 
@@ -107,17 +108,38 @@ async function createApp({ dataDir }) {
   });
 
   // ===== patient auth & self-service =====
-  route('POST', '/api/patient/login', null, async (ctx) => {
-    const hn = str(ctx.body.hn, 30), namePart = normName(str(ctx.body.namePart, 60)), d = ctx.body.descriptor;
-    const k1 = `plogin:${ctx.ip}`, k2 = `plogin-hn:${normName(hn)}`;
+  // Step 1: HN or phone + part of name -> short-lived "pre" session. Step 2: live face match -> real session.
+  const findByIdent = (ident) => {
+    const t = str(ident, 30).toLowerCase(); if (!t) return null;
+    const byHn = db.patients.find(x => x.hn.toLowerCase() === t); if (byHn) return byHn;
+    const ph = normPhone(ident); return ph ? db.patients.find(x => x.phone === ph) || null : null;
+  };
+  route('POST', '/api/patient/identify', null, (ctx) => {
+    const ident = str(ctx.body.id, 30), namePart = normName(str(ctx.body.namePart, 60));
+    const k1 = `plogin:${ctx.ip}`, k2 = `plogin-id:${normName(ident)}`;
     if (sec.isBlocked(k1, 20) || sec.isBlocked(k2, 5)) bad('พยายามมากเกินไป กรุณารอ 15 นาทีหรือติดต่อเจ้าหน้าที่', 429);
-    const fail = () => { sec.hit(k1, 20, 15 * 60e3); sec.hit(k2, 5, 15 * 60e3); bad('ข้อมูลไม่ตรงกับระบบ หรือสแกนใบหน้าไม่ผ่าน', 401); };
+    const p = findByIdent(ident);
+    if (!p || namePart.length < 2 || !normName(p.name).includes(namePart)) { sec.hit(k1, 20, 15 * 60e3); sec.hit(k2, 5, 15 * 60e3); bad('ข้อมูลไม่ตรงกับระบบ กรุณาตรวจสอบ HN/เบอร์โทร และชื่ออีกครั้ง', 401); }
+    sec.destroySession(cookies(ctx.req).pat_pre);
+    const token = sec.createSession({ kind: 'patient-pre', patientId: p.id, fails: 0, key: k2 }, 5 * 60e3, false);
+    setCookie(ctx.req, ctx.res, 'pat_pre', token, 5 * 60);
+    return { ok: true, hasFace: !!p.descriptor };
+  });
+  route('POST', '/api/patient/login', null, (ctx) => {
+    const tok = cookies(ctx.req).pat_pre, pre = sec.getSession(tok);
+    if (!pre || pre.kind !== 'patient-pre') bad('หมดเวลา กรุณากรอก HN/เบอร์โทรและชื่อใหม่อีกครั้ง', 401);
+    const p = patientById(pre.patientId); const d = ctx.body.descriptor;
+    if (!p) bad('ไม่พบข้อมูล', 401);
+    if (!p.descriptor) bad('คุณยังไม่ได้ลงทะเบียนใบหน้า กรุณาติดต่อเจ้าหน้าที่', 409);
     if (!Array.isArray(d) || d.length !== 128 || !d.every(n => Number.isFinite(n) && Math.abs(n) < 5)) bad('สแกนใบหน้าไม่สำเร็จ กรุณาลองใหม่');
-    const p = db.patients.find(x => x.hn.toLowerCase() === hn.toLowerCase());
-    const dist = p && p.descriptor ? Math.hypot(...p.descriptor.map((v, i) => v - d[i])) : Infinity;
-    const nameOk = p && namePart.length >= 2 && normName(p.name).includes(namePart);
-    if (!p || !nameOk || !(dist < db.settings.face.threshold)) fail();
-    sec.clearKey(k2);
+    if (sec.isBlocked(pre.key, 5) || sec.isBlocked(`plogin:${ctx.ip}`, 20)) bad('พยายามมากเกินไป กรุณารอ 15 นาทีหรือติดต่อเจ้าหน้าที่', 429);
+    const dist = Math.hypot(...p.descriptor.map((v, i) => v - d[i]));
+    if (!(dist < db.settings.face.threshold)) {
+      sec.hit(pre.key, 5, 15 * 60e3); sec.hit(`plogin:${ctx.ip}`, 20, 15 * 60e3);
+      if (++pre.fails >= 3) { sec.destroySession(tok); setCookie(ctx.req, ctx.res, 'pat_pre', '', 0); bad('สแกนใบหน้าไม่ผ่านหลายครั้ง กรุณากรอกข้อมูลใหม่อีกครั้ง', 401); }
+      bad('ใบหน้าไม่ตรงกับข้อมูลในระบบ กรุณาลองอีกครั้ง', 401);
+    }
+    sec.destroySession(tok); setCookie(ctx.req, ctx.res, 'pat_pre', '', 0); sec.clearKey(pre.key);
     const token = sec.createSession({ kind: 'patient', patientId: p.id }, 2 * 3600e3);
     setCookie(ctx.req, ctx.res, 'pat_sid', token, 2 * 3600);
     S.audit('patient:' + p.hn, 'login');
@@ -238,6 +260,7 @@ async function createApp({ dataDir }) {
     if (isNew || b.name !== undefined) { const n = str(b.name, 100); if (n.length < 2) bad('กรุณากรอกชื่อคนไข้'); p.name = n; }
     if (isNew || b.deliveryDate !== undefined) { if (!isDate(b.deliveryDate)) bad('วันที่คลอดไม่ถูกต้อง (ต้องไม่เกินวันนี้)'); p.deliveryDate = b.deliveryDate; }
     if (isNew || b.deliveryMode !== undefined) { if (!['vaginal', 'cesarean'].includes(b.deliveryMode)) bad('ลักษณะการคลอดไม่ถูกต้อง'); p.deliveryMode = b.deliveryMode; }
+    if (b.phone !== undefined) { const raw = str(b.phone, 20); const ph = raw ? normPhone(raw) : ''; if (raw && !ph) bad('เบอร์โทรไม่ถูกต้อง (9–10 หลัก)'); if (ph && db.patients.some(x => x.id !== p.id && x.phone === ph)) bad('เบอร์โทรนี้ถูกใช้กับคนไข้รายอื่นแล้ว', 409); p.phone = ph; }
     if (b.lineUserId !== undefined) { const l = str(b.lineUserId, 60); if (l && !/^[A-Za-z0-9]+$/.test(l)) bad('LINE userId ไม่ถูกต้อง'); p.lineUserId = l; }
     if (b.descriptor) p.descriptor = readDescriptor(b.descriptor);
     if (b.photo) S.savePhoto(p.id, readPhoto(b.photo));
@@ -309,7 +332,7 @@ async function createApp({ dataDir }) {
       try {
         const existing = db.patients.find(x => x.hn.toLowerCase() === String(r.hn || '').toLowerCase());
         const p = existing || { id: crypto.randomUUID(), createdAt: new Date().toISOString() };
-        applyPatient(p, { hn: r.hn, name: r.name, deliveryDate: r.deliveryDate, deliveryMode: r.deliveryMode, lineUserId: r.lineUserId }, !existing);
+        applyPatient(p, { hn: r.hn, name: r.name, deliveryDate: r.deliveryDate, deliveryMode: r.deliveryMode, lineUserId: r.lineUserId, phone: r.phone }, !existing);
         if (existing) updated++; else { db.patients.push(p); created++; }
       } catch { skipped++; }
     }

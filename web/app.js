@@ -10,7 +10,7 @@
   async function api(method, url, body) {
     const r = await fetch(url, { method, headers: { 'x-requested-with': 'fetch', 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
     const data = (r.headers.get('content-type') || '').includes('json') ? await r.json() : null;
-    if (!r.ok) { const e = new Error((data && data.error) || 'เกิดข้อผิดพลาด'); e.status = r.status; if (r.status === 401 && url !== '/api/patient/login') showLogin(); throw e; }
+    if (!r.ok) { const e = new Error((data && data.error) || 'เกิดข้อผิดพลาด'); e.status = r.status; if (r.status === 401 && !['/api/patient/login', '/api/patient/identify'].includes(url)) showLogin(); throw e; }
     return data;
   }
 
@@ -30,25 +30,33 @@
   });
   window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 
-  // ---------- Login (HN + part of name + face) ----------
+  // ---------- Login: step 1 (HN or phone + part of name) → step 2 (live face scan, no upload) ----------
   const login = $('#login'), lform = $('#lform');
-  let face = null;
-  function showLogin(msg) { me = null; login.hidden = false; $('#bottom').hidden = true; $$('.view').forEach(v => v.classList.remove('on')); if (msg) $('#lmsg').textContent = msg; }
-  lform.face.addEventListener('change', async () => {
-    face = null; $('#lprev').hidden = true; const st = $('#lstat'); st.textContent = 'กำลังตรวจจับใบหน้า...'; st.className = 'muted'; $('#lmsg').textContent = '';
-    try { face = await PNCFace.scan(lform.face.files[0]); $('#lprev').src = face.photo; $('#lprev').hidden = false; st.textContent = '✓ พบใบหน้า'; st.className = 'okt'; }
-    catch (e) { st.textContent = e.message; st.className = 'errt'; lform.face.value = ''; }
-  });
-  lform.addEventListener('submit', async (e) => {
-    e.preventDefault(); $('#lmsg').textContent = '';
-    if (!face) return ($('#lmsg').textContent = 'กรุณาสแกนใบหน้าก่อน');
-    $('#lbtn').disabled = true;
+  let scanner = null;
+  function showLogin(msg) { stopScan(); me = null; login.hidden = false; $('#bottom').hidden = true; $$('.view').forEach(v => v.classList.remove('on')); stepOne(msg); }
+  function stopScan() { if (scanner) { scanner.cancel(); scanner = null; } }
+  function stepOne(msg) { stopScan(); login.classList.remove('scanning'); lform.hidden = false; $('#lstep2').hidden = true; $('#lmsg').textContent = msg || ''; $('#lbtn').disabled = false; }
+  async function stepTwo() {
+    lform.hidden = true; login.classList.add('scanning'); $('#lstep2').hidden = false; $('#lmsg2').textContent = ''; $('#lretry').hidden = true;
+    stopScan(); scanner = PNCFace.liveScan($('#camwrap'), { liveness: true });
     try {
-      await api('POST', '/api/patient/login', { hn: lform.hn.value.trim(), namePart: lform.namePart.value.trim(), descriptor: face.descriptor });
-      lform.reset(); face = null; $('#lprev').hidden = true; $('#lstat').textContent = '';
-      await startApp();
-    } catch (er) { $('#lmsg').textContent = er.message; } finally { $('#lbtn').disabled = false; }
+      const r = await scanner.promise; scanner = null;
+      await api('POST', '/api/patient/login', { descriptor: r.descriptor });      // only the 128-number descriptor is sent
+      lform.reset(); await startApp();
+    } catch (er) {
+      scanner = null;
+      if (er.status === 401 && /ใหม่อีกครั้ง|หมดเวลา/.test(er.message) && !/ใบหน้าไม่ตรง/.test(er.message)) return stepOne(er.message);   // pre-session gone → back to step 1
+      if (er.status === 409 || er.status === 429) return stepOne(er.message);
+      $('#lmsg2').textContent = er.message; $('#lretry').hidden = false;
+    }
+  }
+  lform.addEventListener('submit', async (e) => {
+    e.preventDefault(); $('#lmsg').textContent = ''; $('#lbtn').disabled = true;
+    try { await api('POST', '/api/patient/identify', { id: lform.id.value.trim(), namePart: lform.namePart.value.trim() }); await stepTwo(); }
+    catch (er) { $('#lmsg').textContent = er.message; } finally { $('#lbtn').disabled = false; }
   });
+  $('#lretry').addEventListener('click', stepTwo);
+  $('#lback').addEventListener('click', () => stepOne());
   $('#logout').addEventListener('click', async () => { await api('POST', '/api/patient/logout').catch(() => {}); location.hash = ''; showLogin(); });
 
   // ---------- Assessment ----------
