@@ -9,6 +9,7 @@
   $$('#tabs button').forEach(b => b.addEventListener('click', () => {
     $$('#tabs button').forEach(x => x.classList.toggle('on', x === b));
     $$('main > section').forEach(s => s.hidden = s.id !== 'tab-' + b.dataset.tab);
+    window.scrollTo(0, 0);
   }));
 
   // ---------- Assessment ----------
@@ -152,7 +153,7 @@
       <div class="stats">${order.map(l => `<div class="stat ${COLORS[l]}"><b>${cnt(l)}</b>${risk.LEVELS[l].icon} ${GROUP[l]}</div>`).join('')}</div>
       <div class="grid2"><div class="card"><h2>เรียงตามความเสี่ยง — จัดการคนที่เสี่ยงก่อน</h2>
         <table><tr><th>ระดับ</th><th>รหัส</th><th>วันหลังคลอด</th><th>สาเหตุหลัก</th></tr>
-        ${sorted.map(p => `<tr class="pt" data-id="${p.id}"><td>${risk.LEVELS[p.risk.level].icon}</td><td>${esc(p.name)}</td><td>${p.days}</td><td>${esc(p.risk.reasons[0].text)}${p.confirmed ? ' ✅' : ''}</td></tr>`).join('')}</table>
+        ${sorted.map(p => `<tr class="pt" data-id="${p.id}"><td data-l="ระดับ">${risk.LEVELS[p.risk.level].icon}</td><td data-l="ผู้รับบริการ">${esc(p.name)}</td><td data-l="วันหลังคลอด">${p.days}</td><td data-l="สาเหตุหลัก">${esc(p.risk.reasons[0].text)}${p.confirmed ? ' ✅' : ''}</td></tr>`).join('')}</table>
         <p class="muted">ข้อมูลสมมติ ไม่ใช่ผู้ป่วยจริง</p></div>
         <div class="card" id="detail"></div></div>`;
     $$('tr.pt').forEach(tr => tr.addEventListener('click', () => { sel = PATIENTS.find(p => p.id === tr.dataset.id); renderDash(); }));
