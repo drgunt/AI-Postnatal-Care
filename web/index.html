@@ -16,46 +16,62 @@
   <!-- ========== หน้าแรก ========== -->
   <section class="view on" id="v-home">
     <header class="hero">
-      <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
-        <defs><linearGradient id="gl" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f1d98a"/><stop offset="1" stop-color="#b8892f"/></linearGradient></defs>
-        <circle cx="32" cy="32" r="29" fill="#fff" stroke="url(#gl)" stroke-width="3"/>
-        <path d="M32 47C20 39 16 32 16 26a8 8 0 0 1 16-2 8 8 0 0 1 16 2c0 6-4 13-16 21z" fill="#f0607a"/>
-        <path d="M44 14c6 2 8 8 6 14-6-1-9-6-6-14z" fill="#c9a24b"/>
-      </svg>
-      <div>
+      <img class="logo" src="img/logo.png" alt="">
+      <div class="htxt">
         <h1>หมอท้อง</h1>
         <p class="sub">AI Thai Postnatal Care</p>
+        <p class="desc">ระบบอัจฉริยะเชื่อมโยงการดูแลมารดาหลังคลอด แบบบูรณาการตามศาสตร์การแพทย์แผนไทย</p>
       </div>
+      <button class="gear" data-go="me" aria-label="ตั้งค่า"><svg viewBox="0 0 24 24"><path d="M19.4 13a7.9 7.9 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3h-4l-.4 2.9a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.9 7.9 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1L11 21h4l.4-2.9a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button>
     </header>
+
+    <div class="stage">
+      <img class="mother" src="img/mother.png" alt="">
+      <div class="mascot" id="mascot" role="button" tabindex="0" aria-label="คุยกับน้องหมอท้อง">
+        <img src="img/bot.png" alt="" class="bot">
+        <span class="chip">น้องหมอท้อง</span>
+        <button id="mic" class="mic" aria-label="พูดกับน้องหมอท้อง">
+          <svg viewBox="0 0 24 24" width="30" height="30" fill="#fff"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V22h2v-3.1A7 7 0 0 0 19 12h-2z"/></svg>
+        </button>
+      </div>
+    </div>
     <p class="pill">ต้นแบบเพื่อสาธิต · ไม่ใช่คำแนะนำทางการแพทย์</p>
 
-    <div class="mascot card">
-      <svg viewBox="0 0 80 80" class="bot" aria-hidden="true">
-        <circle cx="40" cy="44" r="28" fill="#fff" stroke="#f6b3c0" stroke-width="2"/>
-        <path d="M14 40a26 26 0 0 1 52 0z" fill="#f0607a"/>
-        <rect x="35" y="19" width="10" height="3.5" rx="1" fill="#fff"/><rect x="38.25" y="15.75" width="3.5" height="10" rx="1" fill="#fff"/>
-        <circle cx="30" cy="48" r="3.2" fill="#3b2a30"/><circle cx="50" cy="48" r="3.2" fill="#3b2a30"/>
-        <path d="M32 57q8 7 16 0" stroke="#f0607a" stroke-width="3" fill="none" stroke-linecap="round"/>
-        <circle cx="24" cy="55" r="3.5" fill="#ffc1cd" opacity=".7"/><circle cx="56" cy="55" r="3.5" fill="#ffc1cd" opacity=".7"/>
-      </svg>
-      <div class="mtxt"><b>น้องหมอท้อง</b><span>แตะไมค์เพื่อพูดอาการ</span></div>
-      <button id="mic" class="mic" aria-label="พูดกับน้องหมอท้อง">
-        <svg viewBox="0 0 24 24" width="28" height="28" fill="#fff"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V22h2v-3.1A7 7 0 0 0 19 12h-2z"/></svg>
-      </button>
-    </div>
-
-    <div class="card">
-      <div class="chead"><h2>ระดับความเสี่ยง</h2><button class="link" data-go="history">ดูรายละเอียด ›</button></div>
-      <div class="chart" data-chart></div>
+    <div class="card gcard">
+      <div class="chead"><span class="cico"><svg viewBox="0 0 24 24" fill="#fff"><path d="M5 12h3v8H5zm5-6h3v14h-3zm5 3h3v11h-3z"/></svg></span><h2>กราฟแสดงระดับความเสี่ยงหลังคลอด</h2></div>
+      <div class="chart-wrap">
+        <div class="legend">
+          <small>ระดับความเสี่ยง<br>หลังคลอด</small>
+          <span class="lg g"><i>✓</i>ปกติ</span><span class="lg y"><i>◷</i>ต้องติดตาม</span><span class="lg o"><i>!</i>เสี่ยง</span><span class="lg r"><i>!</i>รุนแรง<em>(รีบพบแพทย์)</em></span>
+        </div>
+        <div class="chart" data-chart></div>
+      </div>
+      <div class="chead2"><button class="link" data-go="history">📅 ดูรายละเอียด ›</button><small class="wk">ส. = สัปดาห์</small></div>
     </div>
 
     <div class="tiles">
-      <button data-go="assess"><i>📝</i><span>ประเมินอาการ</span></button>
-      <button data-go="chat"><i>💬</i><span>AI หมอท้อง</span></button>
-      <button data-go="follow"><i>📅</i><span>ติดตามผล</span></button>
-      <button data-go="herb" class="leaf"><i>🌿</i><span>สมุนไพรปลอดภัย</span></button>
-      <button data-go="dash" class="gold"><i>📊</i><span>สำหรับบุคลากร</span></button>
-      <button class="soon" disabled><i>📖</i><span>คลังความรู้</span><em>เร็ว ๆ นี้</em></button>
+      <button data-go="birth" style="--tb:#fef4f2"><img src="img/t1.png" alt=""><span>ข้อมูลการคลอด</span></button>
+      <button data-go="assess" style="--tb:#fef2f3"><img src="img/t2.png" alt=""><span>ติดตามและประเมินอาการหลังคลอด</span></button>
+      <button data-go="follow" style="--tb:#fef7ef"><img src="img/t3.png" alt=""><span>หลักการดูแลหลังคลอด</span></button>
+      <button data-go="herb" class="leaf" style="--tb:#f6f9ee"><img src="img/t4.png" alt=""><span>การใช้สมุนไพรให้ปลอดภัย</span></button>
+      <button class="soon" style="--tb:#faf0fb" data-soon><img src="img/t5.png" alt=""><span>คลังความรู้การผดุงครรภ์</span><em>เร็ว ๆ นี้</em></button>
+      <button class="soon" style="--tb:#fdf5ec" data-soon><img src="img/t6.png" alt=""><span>โบราณเชื่อได้ไหม</span><em>เร็ว ๆ นี้</em></button>
+    </div>
+  </section>
+
+  <!-- ========== ข้อมูลการคลอด ========== -->
+  <section class="view" id="v-birth">
+    <div class="topbar"><button class="back" data-go="home" aria-label="กลับ">‹</button><h2>ข้อมูลการคลอด</h2></div>
+    <div class="card">
+      <dl class="kv">
+        <dt>วันคลอด</dt><dd>7 วันที่แล้ว (ตัวอย่าง)</dd>
+        <dt>วิธีคลอด</dt><dd>ทางช่องคลอด</dd>
+        <dt>ครรภ์ที่</dt><dd>1</dd>
+        <dt>อายุครรภ์ (GA)</dt><dd>39 สัปดาห์</dd>
+        <dt>ภาวะแทรกซ้อน</dt><dd>ไม่มี</dd>
+        <dt>โรคประจำตัว/ยา</dt><dd>ไม่มี</dd>
+      </dl>
+      <p class="muted">ข้อมูลตัวอย่าง — แก้ไขข้อมูลที่หน้า “ติดตามและประเมินอาการ”</p>
     </div>
   </section>
 
@@ -115,8 +131,9 @@
 
   <!-- ========== ติดตามผล ========== -->
   <section class="view" id="v-follow">
-    <div class="topbar"><button class="back" data-go="home" aria-label="กลับ">‹</button><h2>ติดตามผล</h2></div>
-    <div class="card"><div id="timeline"></div></div>
+    <div class="topbar"><button class="back" data-go="home" aria-label="กลับ">‹</button><h2>หลักการดูแลหลังคลอด</h2></div>
+    <div class="card alertcard"><h2>🚨 สัญญาณอันตราย รีบไปโรงพยาบาล/โทร 1669</h2><ul class="reasons"><li>เลือดออกมาก ชุ่มผ้าอนามัยเร็ว</li><li>เจ็บหน้าอก หายใจลำบาก ชัก หมดสติ</li><li>ปวดหัวมาก ตาพร่า ความดันสูง</li><li>ไข้ ร่วมกับปวดท้อง/น้ำคาวปลาเหม็น</li><li>คิดทำร้ายตัวเอง (สายด่วน 1323)</li></ul></div>
+    <div class="card"><h2>การติดตามหลังกลับบ้าน</h2><div id="timeline"></div></div>
   </section>
 
   <!-- ========== สมุนไพรปลอดภัย ========== -->
@@ -146,7 +163,7 @@
   <!-- ========== ประวัติการดูแล ========== -->
   <section class="view" id="v-history">
     <div class="topbar"><button class="back" data-go="home" aria-label="กลับ">‹</button><h2>ประวัติการดูแล</h2></div>
-    <div class="card"><div class="chart" data-chart></div><p class="muted">ข้อมูลตัวอย่าง</p></div>
+    <div class="card"><div class="chart" data-chart="wide"></div><p class="muted">ข้อมูลตัวอย่าง · ส. = สัปดาห์</p></div>
     <div class="card" id="histlist"></div>
   </section>
 
@@ -162,16 +179,17 @@
     <div class="card me">
       <div class="avatar">🤱</div>
       <b>คุณแม่ตัวอย่าง</b>
-      <span class="muted">หลังคลอด 10 วัน · คลอดทางช่องคลอด</span>
+      <span class="muted">หลังคลอด 7 วัน · คลอดทางช่องคลอด</span>
     </div>
+    <button class="primary" data-go="dash" style="margin-bottom:14px">📊 สำหรับบุคลากร (Dashboard)</button>
     <div class="card"><p class="muted">ข้อมูลทั้งหมดเป็นข้อมูลสมมติ ไม่มีการส่งออกจากเบราว์เซอร์<br>AI แนะนำ — บุคลากรตัดสินใจ</p></div>
   </section>
 
   <nav id="bottom">
     <button data-go="home" data-nav="home"><svg viewBox="0 0 24 24"><path d="M12 3 2 12h3v8h5v-5h4v5h5v-8h3z"/></svg><span>หน้าแรก</span></button>
-    <button data-go="history" data-nav="history"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zm8 1.5V8h4.5zM9 12h8v1.6H9zm0 4h8v1.6H9z"/></svg><span>ประวัติ</span></button>
+    <button data-go="history" data-nav="history"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zm8 1.5V8h4.5zM9 12h8v1.6H9zm0 4h8v1.6H9z"/></svg><span>ประวัติการดูแล</span></button>
     <button data-go="alerts" data-nav="alerts"><svg viewBox="0 0 24 24"><path d="M12 22a2.4 2.4 0 0 0 2.4-2.4h-4.8A2.4 2.4 0 0 0 12 22zm7-6V11a7 7 0 0 0-5-6.7V3a2 2 0 0 0-4 0v1.3A7 7 0 0 0 5 11v5l-2 2v1h18v-1z"/></svg><span>แจ้งเตือน</span><b class="dot" id="dot">1</b></button>
-    <button data-go="me" data-nav="me"><svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-4.4 0-8 2.2-8 5v3h16v-3c0-2.8-3.6-5-8-5z"/></svg><span>บัญชี</span></button>
+    <button data-go="me" data-nav="me"><svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-4.4 0-8 2.2-8 5v3h16v-3c0-2.8-3.6-5-8-5z"/></svg><span>บัญชีของฉัน</span></button>
   </nav>
 </div>
 <script src="risk-engine.js"></script>

@@ -6,7 +6,7 @@
   const badge = (r) => `<span class="badge b-${r.level}">${r.icon} ${r.label} · ${r.th}</span>`;
 
   // ---------- Router (หน้าแรก + หน้าย่อย, รองรับปุ่ม Back ของเบราว์เซอร์) ----------
-  const VIEWS = ['home', 'assess', 'chat', 'follow', 'herb', 'dash', 'history', 'alerts', 'me'];
+  const VIEWS = ['home', 'assess', 'chat', 'follow', 'herb', 'dash', 'history', 'alerts', 'me', 'birth'];
   const NAV = ['home', 'history', 'alerts', 'me'];
   function show(name) {
     if (!VIEWS.includes(name)) name = 'home';
@@ -205,29 +205,39 @@
   $('#timeline').innerHTML = `<div class="tl">${FU.map(([d, q, r]) => `<div class="d">Day ${d}</div><div class="bubble">${esc(q)}</div><div class="replies">${r.map(x => `<span>${esc(x)}</span>`).join('')}</div>`).join('')}</div>`;
 
   // ---------- กราฟความเสี่ยง + ประวัติ (ข้อมูลตัวอย่างที่ผ่าน Risk Engine) ----------
-  const HIST = [
-    [1, { bleeding: 'clots', pain: 5 }], [2, { pain: 5 }], [3, { pain: 2 }], [4, { pain: 4 }], [5, { pain: 7 }],
-    [6, { milk: 'low' }], [7, { pain: 2 }], [10, { pain: 2 }], [14, { pain: 1 }], [21, {}], [28, {}], [35, {}], [42, {}],
-  ].map(([d, o]) => ({ day: d, r: risk.assess({ ...base, days: d, ...o }) }));
+  const COLS = [[1, ['วันคลอด', '(วันที่ 1)'], ['คลอด']], [2, ['2']], [3, ['3']], [4, ['4']], [5, ['5']], [6, ['6']], [7, ['7']], [10, ['8–14', 'วัน'], ['8–14']],
+    [17, ['สัปดาห์', 'ที่ 3'], ['ส.3']], [24, ['สัปดาห์', 'ที่ 4'], ['ส.4']], [31, ['สัปดาห์', 'ที่ 5'], ['ส.5']], [38, ['สัปดาห์', 'ที่ 6'], ['ส.6']]];
+  const OV = { 1: { bleeding: 'clots', pain: 5 }, 2: { pain: 5 }, 3: { pain: 2 }, 4: { pain: 4 }, 5: { pain: 7 }, 6: { milk: 'low' }, 7: { pain: 2 } };
+  const HIST = COLS.map(([d, l, sh]) => ({ day: d, label: l, short: sh, r: risk.assess({ ...base, days: d, ...(OV[d] || {}) }) }));
   const CCOL = { green: '#4caf7a', yellow: '#f2c230', orange: '#f08a3c', red: '#d62b45' };
-  function chartSVG() {
-    const W = 320, H = 168, L = 56, R = 14, SHORT = { red: 'ฉุกเฉิน', orange: 'เสี่ยง', yellow: 'ติดตาม', green: 'ปกติ' }, T = 8, B = 28, bands = ['red', 'orange', 'yellow', 'green'];
-    const bh = (H - T - B) / 4, x = d => L + (d - 1) / 41 * (W - L - R), y = rk => T + (3 - rk + 0.5) * bh;
-    const bg = bands.map((l, i) => `<rect x="${L}" y="${T + i * bh}" width="${W - L - R}" height="${bh}" fill="${CCOL[l]}" opacity=".16"/><text x="${L - 6}" y="${T + i * bh + bh / 2 + 4}" text-anchor="end" font-size="10" fill="#8d7079">${SHORT[l]}</text>`).join('');
-    const pts = HIST.map(h => [x(h.day), y(risk.LEVELS[h.r.level].rank)]);
-    const line = `<polyline points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="#c9a24b" stroke-width="2"/>`;
-    const dots = HIST.map((h, i) => `<circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="4.5" fill="${CCOL[h.r.level]}" stroke="#fff" stroke-width="1.5"/>`).join('');
-    const xl = [1, 7, 14, 28, 42].map(d => `<text x="${d === 42 ? W - 2 : x(d)}" y="${H - 8}" text-anchor="${d === 42 ? 'end' : 'middle'}" font-size="10" fill="#8d7079">${d === 42 ? 'สัปดาห์ 6' : 'วัน ' + d}</text>`).join('');
-    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟระดับความเสี่ยงตามวันหลังคลอด (ข้อมูลตัวอย่าง)">${bg}${line}${dots}${xl}</svg>`;
+  const TODAY = 7;
+  function chartSVG(wide) {
+    const W = wide ? 330 : 258, H = wide ? 210 : 214, L = wide ? 52 : 46, R = 4, T = 6, B = wide ? 74 : 86, bands = ['red', 'orange', 'yellow', 'green'];
+    const NAME = { red: 'รุนแรง', orange: 'เสี่ยง', yellow: 'ต้องติดตาม', green: 'ปกติ' };
+    const bh = (H - T - B) / 4, cw = (W - L - R) / COLS.length, x = i => L + cw * (i + 0.5), y = rk => T + (3 - rk + 0.5) * bh;
+    const bg = bands.map((l, i) => `<rect x="${L}" y="${T + i * bh}" width="${W - L - R}" height="${bh}" fill="${CCOL[l]}" opacity=".16"/><text x="${L - 4}" y="${T + i * bh + bh / 2 + 3}" text-anchor="end" font-size="8.5" fill="#8d7079">${NAME[l]}</text>`).join('');
+    const grid = COLS.map((_, i) => `<line x1="${L + cw * i}" x2="${L + cw * i}" y1="${T}" y2="${H - B}" stroke="#fff" stroke-dasharray="2 3" opacity=".9"/>`).join('');
+    const pts = HIST.map((h, i) => [x(i), y(risk.LEVELS[h.r.level].rank)]);
+    const line = `<polyline points="${pts.map(q => q.join(',')).join(' ')}" fill="none" stroke="#c9a24b" stroke-width="1.8"/>`;
+    const dots = HIST.map((h, i) => `<circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="3.6" fill="${CCOL[h.r.level]}" stroke="#fff" stroke-width="1.2"/>`).join('');
+    const ti = COLS.findIndex(c => c[0] === TODAY), yl = H - B + 12;
+    const xl = HIST.map((h, i) => {
+      const hi = i === ti;
+      return (hi ? `<circle cx="${x(i)}" cy="${yl - 3}" r="8.5" fill="#ffd6de"/>` : '') +
+        (wide ? h.label : (h.short || h.label)).map((t, k) => `<text x="${x(i)}" y="${yl + k * 9}" text-anchor="middle" font-size="${t.length > 3 ? 7 : 8.5}" fill="${hi ? '#e0476a' : '#8d7079'}" font-weight="${hi ? 700 : 400}">${t}</text>`).join('');
+    }).join('');
+    const bx1 = x(0) - cw / 2 + 2, bx2 = x(ti) + cw / 2 - 2, by = H - B + 36;
+    const br = `<path d="M${bx1} ${by - 4}v4h${bx2 - bx1}v-4" fill="none" stroke="#f0607a" stroke-width="1"/><text x="${(bx1 + bx2) / 2}" y="${by + 9}" text-anchor="middle" font-size="10" fill="#f0607a">♥</text>` +
+      `<text x="${(bx1 + bx2) / 2}" y="${by + 20}" text-anchor="middle" font-size="7.5" fill="#e0476a">ช่วงเริ่มต้น</text><text x="${(bx1 + bx2) / 2}" y="${by + 29}" text-anchor="middle" font-size="7.5" fill="#e0476a">กระตุ้นรับบริการฟื้นฟูหลังคลอด</text>`;
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟระดับความเสี่ยงตามวันหลังคลอด (ข้อมูลตัวอย่าง)">${bg}${grid}${line}${dots}${xl}${br}</svg>`;
   }
-  $$('[data-chart]').forEach(el => el.innerHTML = chartSVG());
+  $$('[data-chart]').forEach(el => el.innerHTML = chartSVG(el.dataset.chart === 'wide'));
   $('#histlist').innerHTML = [...HIST].reverse().map(h => `<div class="hist"><span>${h.r.icon}</span><b>${h.r.level === 'green' ? 'ปกติ' : esc(h.r.reasons[0].text)}</b><small>วัน ${h.day}</small></div>`).join('');
 
   // ---------- แจ้งเตือน (ตัวอย่าง: วันนี้ = วันที่ 10) ----------
-  const TODAY = 10;
   const nextIdx = FU.findIndex(f => f[0] > TODAY);
   $('#alertlist').innerHTML = FU.map(([d, q], i) => `<div class="card al ${i === nextIdx ? 'next' : d <= TODAY ? 'done' : ''}"><div class="n"><span>วัน<b>${d}</b></span></div><div><div>${esc(q)}</div>${d <= TODAY ? '<small>✓ ตอบแล้ว</small>' : i === nextIdx ? '<small style="color:var(--pink-d)">ถัดไป</small>' : ''}</div></div>`).join('');
-  $('#dot').textContent = FU.filter(f => f[0] > TODAY).length ? '1' : ''; if (!$('#dot').textContent) $('#dot').hidden = true;
+  $('#dot').textContent = FU.filter(f => f[0] > TODAY).length || ''; if (!$('#dot').textContent) $('#dot').hidden = true;
 
   // ---------- ไมค์ น้องหมอท้อง (ใช้ได้เมื่อเบราว์เซอร์รองรับ Web Speech) ----------
   $('#mic').addEventListener('click', () => {
@@ -240,6 +250,10 @@
     rec.onend = rec.onerror = () => mic.classList.remove('live');
     try { rec.start(); } catch (_) { mic.classList.remove('live'); }
   });
+
+  const mascot = $('#mascot');
+  mascot.addEventListener('click', e => { if (!e.target.closest('#mic')) location.hash = 'chat'; });
+  mascot.addEventListener('keydown', e => { if (e.key === 'Enter') location.hash = 'chat'; });
 
   show(location.hash.slice(1));
 })();
