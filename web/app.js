@@ -2,11 +2,20 @@
   const { risk, ttm, herbs } = window.PNC;
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const badge = (r) => `<span class="badge b-${r.level}">${r.icon} ${r.label} · ${r.th}</span>`;
 
-  // ---------- Router (หน้าแรก + หน้าย่อย, รองรับปุ่ม Back ของเบราว์เซอร์) ----------
-  const VIEWS = ['home', 'assess', 'chat', 'follow', 'herb', 'dash', 'history', 'alerts', 'me', 'birth'];
+  let me = null, kb = { herbs: [], myths: [], library: [], aiEnabled: false }, history = [];
+
+  async function api(method, url, body) {
+    const r = await fetch(url, { method, headers: { 'x-requested-with': 'fetch', 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin' });
+    const data = (r.headers.get('content-type') || '').includes('json') ? await r.json() : null;
+    if (!r.ok) { const e = new Error((data && data.error) || 'เกิดข้อผิดพลาด'); e.status = r.status; if (r.status === 401 && url !== '/api/patient/login') showLogin(); throw e; }
+    return data;
+  }
+
+  // ---------- Router ----------
+  const VIEWS = ['home', 'assess', 'chat', 'follow', 'herb', 'history', 'alerts', 'me', 'birth', 'myths', 'library'];
   const NAV = ['home', 'history', 'alerts', 'me'];
   function show(name) {
     if (!VIEWS.includes(name)) name = 'home';
@@ -15,20 +24,39 @@
     window.scrollTo(0, 0);
   }
   document.addEventListener('click', e => {
-    const b = e.target.closest('[data-go]'); if (!b) return;
+    const b = e.target.closest('[data-go]'); if (!b || b.classList.contains('soon')) return;
     const to = b.dataset.go;
     if (location.hash.slice(1) === to || (to === 'home' && !location.hash)) show(to); else location.hash = to === 'home' ? '' : to;
   });
   window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 
+  // ---------- Login (HN + part of name + face) ----------
+  const login = $('#login'), lform = $('#lform');
+  let face = null;
+  function showLogin(msg) { me = null; login.hidden = false; $('#bottom').hidden = true; $$('.view').forEach(v => v.classList.remove('on')); if (msg) $('#lmsg').textContent = msg; }
+  lform.face.addEventListener('change', async () => {
+    face = null; $('#lprev').hidden = true; const st = $('#lstat'); st.textContent = 'กำลังตรวจจับใบหน้า...'; st.className = 'muted'; $('#lmsg').textContent = '';
+    try { face = await PNCFace.scan(lform.face.files[0]); $('#lprev').src = face.photo; $('#lprev').hidden = false; st.textContent = '✓ พบใบหน้า'; st.className = 'okt'; }
+    catch (e) { st.textContent = e.message; st.className = 'errt'; lform.face.value = ''; }
+  });
+  lform.addEventListener('submit', async (e) => {
+    e.preventDefault(); $('#lmsg').textContent = '';
+    if (!face) return ($('#lmsg').textContent = 'กรุณาสแกนใบหน้าก่อน');
+    $('#lbtn').disabled = true;
+    try {
+      await api('POST', '/api/patient/login', { hn: lform.hn.value.trim(), namePart: lform.namePart.value.trim(), descriptor: face.descriptor });
+      lform.reset(); face = null; $('#lprev').hidden = true; $('#lstat').textContent = '';
+      await startApp();
+    } catch (er) { $('#lmsg').textContent = er.message; } finally { $('#lbtn').disabled = false; }
+  });
+  $('#logout').addEventListener('click', async () => { await api('POST', '/api/patient/logout').catch(() => {}); location.hash = ''; showLogin(); });
+
   // ---------- Assessment ----------
   const STATUS = { consider: 'พิจารณาได้ (รอยืนยัน)', defer: 'ยังไม่ถึงช่วงที่พิจารณา', avoid: 'ไม่แนะนำ/มีข้อห้าม' };
-  function readForm(form) {
+  const form = $('#form'), result = $('#result');
+  function readForm() {
     const o = {};
-    for (const el of form.elements) {
-      if (!el.name) continue;
-      o[el.name] = el.type === 'checkbox' ? el.checked : el.value;
-    }
+    for (const el of form.elements) { if (el.name) o[el.name] = el.type === 'checkbox' ? el.checked : el.value; }
     return o;
   }
   function renderResult(a, target) {
@@ -47,31 +75,20 @@
       ${t.items.map(i => `<div class="item ${i.status}"><b>${esc(i.name)}</b> — ${STATUS[i.status]}<ul>${i.why.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>`).join('')}
       <p class="muted">AI แนะนำ — แพทย์/แพทย์แผนไทยเป็นผู้ยืนยันก่อนทำหัตถการ</p>`;
   }
-  const form = $('#form'), result = $('#result');
   const rerun = () => {
-    const a = readForm(form);
+    const a = readForm();
     renderResult(a, result);
     const r = risk.assess(a);
     $('#levelbar').innerHTML = `${badge(r)}<small>${esc(r.reasons[0].text)}</small>`;
   };
   form.addEventListener('input', rerun); form.addEventListener('change', rerun);
-  const PRESETS = {
-    green:  {},
-    yellow: { pain: 5, milk: 'low', engorgement: true },
-    orange: { tempC: 38.4, pain: 6 },
-    red:    { bleeding: 'heavy' },
-  };
-  $$('[data-preset]').forEach(b => b.addEventListener('click', () => {
-    form.reset();
-    for (const [k, v] of Object.entries(PRESETS[b.dataset.preset])) {
-      const el = form.elements[k]; if (!el) continue;
-      if (el.type === 'checkbox') el.checked = v; else el.value = v;
-    }
-    rerun();
-  }));
-  rerun();
+  $('#saveAssess').addEventListener('click', async () => {
+    const btn = $('#saveAssess'); btn.disabled = true;
+    try { const r = await api('POST', '/api/patient/assessment', { input: readForm() }); $('#saveMsg').textContent = '✓ บันทึกแล้ว เจ้าหน้าที่จะเห็นผลนี้' + (r.level === 'red' || r.level === 'orange' ? ' และจะติดตามโดยเร็ว' : ''); await loadHistory(); }
+    catch (e) { $('#saveMsg').textContent = e.message; } finally { btn.disabled = false; }
+  });
 
-  // ---------- Chat ----------
+  // ---------- Chat: triage first (rule-based), then optional AI Q&A ----------
   const YN = [{ l: 'ใช่', v: true }, { l: 'ไม่ใช่', v: false }];
   const STEPS = [
     { k: 'bleedingHeavy', q: 'เลือดออกมากจนชุ่มผ้าอนามัยภายใน 1 ชั่วโมงหรือไม่?', o: YN },
@@ -79,33 +96,28 @@
     { k: 'headacheVision', q: 'ปวดศีรษะรุนแรงหรือตาพร่ามัวหรือไม่?', o: YN },
     { k: 'feverQ', q: 'มีไข้หรือหนาวสั่นหรือไม่?', o: [{ l: 'มีไข้ (≥38°C)', v: 38.5 }, { l: 'ไม่มี', v: 36.8 }] },
     { k: 'pain', q: 'ระดับความปวดตอนนี้ 0–10?', o: [0, 2, 4, 6, 8, 10].map(n => ({ l: String(n), v: n })) },
-    { k: 'delivery', q: 'คลอดแบบใด?', o: [{ l: 'ทางช่องคลอด', v: 'vaginal' }, { l: 'ผ่าตัดคลอด', v: 'cesarean' }] },
     { k: 'woundProblem', q: 'แผลผ่าตัด/แผลฝีเย็บบวม แดง มีหนอง หรือแยกหรือไม่?', o: YN },
-    { k: 'milk', q: 'ให้นมบุตรหรือไม่ และน้ำนมเพียงพอไหม?', o: [{ l: 'เพียงพอ', v: 'enough' }, { l: 'น้อย', v: 'low' }, { l: 'ยังไม่มีน้ำนม', v: 'none' }] },
+    { k: 'milk', q: 'น้ำนมเพียงพอไหม?', o: [{ l: 'เพียงพอ', v: 'enough' }, { l: 'น้อย', v: 'low' }, { l: 'ยังไม่มีน้ำนม', v: 'none' }] },
     { k: 'selfHarm', q: 'ช่วงนี้เคยคิดทำร้ายตัวเองหรือรู้สึกไม่อยากมีชีวิตอยู่หรือไม่?', o: YN },
   ];
-  let ans, step, pending;
+  let ans, step, started, finished, aiHistory;
   const log = $('#log'), quick = $('#quick');
   const say = (t, who = 'bot') => { const d = document.createElement('div'); d.className = 'msg ' + who; d.textContent = t; log.appendChild(d); log.scrollTop = log.scrollHeight; return d; };
   function resetChat() {
-    ans = { days: 10, delivery: 'vaginal', bleeding: 'normal', tempC: 36.8, pain: 0, milk: 'enough' }; step = 0; pending = null; log.innerHTML = ''; quick.innerHTML = '';
-    say('สวัสดีค่ะ น้องหมอท้องเอง 🤱 ไม่ใช่แพทย์ แต่ช่วยคัดกรองและบอกได้ว่าเมื่อไรควรพบบุคลากร\nเล่าอาการได้เลย เช่น “หลังคลอด 10 วัน ปวดหลังมาก”');
+    ans = { days: me ? me.days : 0, delivery: me ? me.deliveryMode : 'vaginal', bleeding: 'normal', tempC: 36.8, pain: 0, milk: 'enough' };
+    step = 0; started = false; finished = false; aiHistory = []; log.innerHTML = ''; quick.innerHTML = '';
+    say('สวัสดีค่ะ น้องหมอท้องเอง 🤱 ไม่ใช่แพทย์ แต่ช่วยคัดกรองและบอกได้ว่าเมื่อไรควรพบบุคลากร\nเล่าอาการได้เลย เช่น “ปวดหลังมาก” หรือพิมพ์ “เริ่ม” เพื่อตอบคำถามคัดกรอง');
   }
   function parseFree(text) {
-    const m = text.match(/(\d+)\s*วัน/); if (m) ans.days = Number(m[1]);
-    const w = text.match(/(\d+)\s*สัปดาห์/); if (w) ans.days = Number(w[1]) * 7;
-    if (/ผ่า(ตัด)?คลอด|ผ่าคลอด/.test(text)) { ans.delivery = 'cesarean'; ans._deliverySet = true; }
     if (/ปวด/.test(text) && !ans.pain) ans.pain = 5;
     if (/ไข้/.test(text)) ans.tempC = 38.2;
     if (/เลือด(ออก)?มาก|ตกเลือด/.test(text)) ans.bleeding = 'heavy';
   }
   function nextQuestion() {
-    while (step < STEPS.length && STEPS[step].k === 'delivery' && ans._deliverySet) step++;
     while (step < STEPS.length && STEPS[step].k === 'woundProblem' && ans.delivery !== 'cesarean') step++;
     if (step >= STEPS.length) return finishChat();
     const s = STEPS[step];
-    say(s.q);
-    quick.innerHTML = '';
+    say(s.q); quick.innerHTML = '';
     s.o.forEach(o => { const b = document.createElement('button'); b.type = 'button'; b.textContent = o.l; b.onclick = () => answer(s, o); quick.appendChild(b); });
   }
   function answer(s, o) {
@@ -114,73 +126,42 @@
     else if (s.k === 'feverQ') ans.tempC = o.v;
     else ans[s.k] = o.v;
     step++;
-    const r = risk.assess(ans);
-    if (r.level === 'red') return finishChat();      // red flag → หยุดถามและเข้าสู่ระบบส่งต่อ
+    if (risk.assess(ans).level === 'red') return finishChat();      // red flag → หยุดถามและเข้าสู่ระบบส่งต่อ
     nextQuestion();
   }
   function finishChat() {
-    quick.innerHTML = '';
+    quick.innerHTML = ''; finished = true;
     const r = risk.assess(ans), t = ttm.recommend(ans, r);
     const lines = [`ผลคัดกรองเบื้องต้น: ${r.icon} ${r.label} (${r.th})`, ...r.reasons.map(x => '• ' + x.text), '', 'แนวทาง: ' + r.action];
-    if (r.level === 'red') lines.push('', '🚨 โปรดโทร 1669 หรือไปโรงพยาบาลทันที ดิฉันจะหยุดให้คำแนะนำทั่วไป และแจ้งบุคลากรผู้ดูแลให้ติดต่อกลับ');
+    if (r.level === 'red') lines.push('', '🚨 โปรดโทร 1669 หรือไปโรงพยาบาลทันที ระบบหยุดให้คำแนะนำทั่วไปและแจ้งเจ้าหน้าที่ให้ติดตาม');
     else if (r.level === 'green' || r.level === 'yellow') {
       lines.push('', 'คำแนะนำดูแลตนเอง: พักผ่อนให้เพียงพอ ดื่มน้ำ ให้นมตามต้องการของลูก สังเกตเลือดออก ไข้ และอาการปวดต่อเนื่อง');
       const c = t.items.filter(i => i.status === 'consider').map(i => '• ' + i.name);
       if (c.length) lines.push('', 'บริการแพทย์แผนไทยที่อาจพิจารณา (ต้องให้แพทย์แผนไทยประเมินและยืนยันก่อน):', ...c);
     } else lines.push('', 'ยังไม่แนะนำหัตถการใด ๆ จนกว่าบุคลากรจะประเมิน');
     if (ans.selfHarm) lines.push('', 'สายด่วนสุขภาพจิต 1323 (24 ชม.)');
+    if (kb.aiEnabled && r.level !== 'red') lines.push('', 'มีคำถามอื่น พิมพ์ถามน้องหมอท้องได้เลยค่ะ');
     say(lines.join('\n'));
+    api('POST', '/api/patient/assessment', { input: ans }).then(loadHistory).catch(() => {});   // ส่งผลคัดกรองให้เจ้าหน้าที่เห็น
     const b = document.createElement('button'); b.type = 'button'; b.textContent = 'เริ่มใหม่'; b.onclick = resetChat; quick.appendChild(b);
   }
-  $('#chatform').addEventListener('submit', e => {
+  $('#chatform').addEventListener('submit', async (e) => {
     e.preventDefault();
     const v = $('#chatin').value.trim(); if (!v) return;
     $('#chatin').value = '';
     say(v, 'me');
-    if (step === 0 && !pending) { parseFree(v); pending = true; nextQuestion(); }
-    else say('กรุณาเลือกคำตอบจากปุ่มด้านล่าง เพื่อให้คัดกรองได้แม่นยำ');
+    if (!started && !finished) { started = true; parseFree(v); return nextQuestion(); }
+    if (!finished) return say('กรุณาเลือกคำตอบจากปุ่มด้านล่าง เพื่อให้คัดกรองได้แม่นยำ');
+    if (!kb.aiEnabled) return say('ตอนนี้ยังไม่เปิดให้ถามตอบอิสระ หากมีข้อสงสัยกรุณาติดต่อเจ้าหน้าที่ค่ะ');
+    const wait = say('กำลังคิด...');
+    try {
+      const r = await api('POST', '/api/patient/chat', { message: v, history: aiHistory });
+      wait.textContent = r.reply;
+      if (!r.referral) aiHistory.push({ role: 'user', content: v }, { role: 'assistant', content: r.reply });
+    } catch (er) { wait.textContent = er.message; }
   });
-  resetChat();
 
-  // ---------- Dashboard (ข้อมูลสมมติ) ----------
-  const base = { days: 10, delivery: 'vaginal', bleeding: 'normal', tempC: 36.8, pain: 2, sys: 118, dia: 76, epds: 4, milk: 'enough', sleepHours: 6 };
-  const PATIENTS = [
-    { id: 'A-01', name: 'มารดา A', ...base, bleeding: 'heavy', days: 2 },
-    { id: 'A-02', name: 'มารดา B', ...base, days: 5, headacheVision: true, sys: 152, dia: 98 },
-    { id: 'A-03', name: 'มารดา C', ...base, days: 9, tempC: 38.6, delivery: 'cesarean', woundProblem: true },
-    { id: 'A-04', name: 'มารดา D', ...base, days: 20, epds: 15 },
-    { id: 'A-05', name: 'มารดา E', ...base, days: 12, pain: 5, milk: 'low' },
-    { id: 'A-06', name: 'มารดา F', ...base, days: 14, engorgement: true, sleepHours: 3 },
-    { id: 'A-07', name: 'มารดา G', ...base, days: 30, pain: 3 },
-    { id: 'A-08', name: 'มารดา H', ...base, days: 42, pain: 0, delivery: 'cesarean' },
-    { id: 'A-09', name: 'มารดา I', ...base, days: 7, hxPPH: true, pain: 3 },
-  ].map(p => ({ ...p, risk: risk.assess(p), confirmed: false }));
-  const order = ['red', 'orange', 'yellow', 'green'];
-  const COLORS = { red: 'b-red', orange: 'b-orange', yellow: 'b-yellow', green: 'b-green' };
-  const GROUP = { red: 'กลุ่มฉุกเฉิน ต้องติดตามทันที', orange: 'กลุ่มเสี่ยง', yellow: 'กลุ่มติดตาม', green: 'กลุ่มปกติ' };
-  let sel = null;
-  function renderDash() {
-    const sorted = [...PATIENTS].sort((a, b) => risk.LEVELS[b.risk.level].rank - risk.LEVELS[a.risk.level].rank);
-    sel = sel || sorted[0];
-    const cnt = (l) => PATIENTS.filter(p => p.risk.level === l).length;
-    $('#dash').innerHTML = `
-      <div class="stats">${order.map(l => `<div class="stat ${COLORS[l]}"><b>${cnt(l)}</b>${risk.LEVELS[l].icon} ${GROUP[l]}</div>`).join('')}</div>
-      <div class="grid2"><div class="card"><h2>เรียงตามความเสี่ยง</h2>
-        <table><tr><th>ระดับ</th><th>รหัส</th><th>วันหลังคลอด</th><th>สาเหตุหลัก</th></tr>
-        ${sorted.map(p => `<tr class="pt" data-id="${p.id}"><td data-l="ระดับ">${risk.LEVELS[p.risk.level].icon}</td><td data-l="ผู้รับบริการ">${esc(p.name)}</td><td data-l="วันหลังคลอด">${p.days}</td><td data-l="สาเหตุหลัก">${esc(p.risk.reasons[0].text)}${p.confirmed ? ' ✅' : ''}</td></tr>`).join('')}</table>
-        <p class="muted">ข้อมูลสมมติ ไม่ใช่ผู้ป่วยจริง</p></div>
-        <div class="card" id="detail"></div></div>`;
-    $$('tr.pt').forEach(tr => tr.addEventListener('click', () => { sel = PATIENTS.find(p => p.id === tr.dataset.id); renderDash(); }));
-    const d = $('#detail');
-    renderResult(sel, d);
-    d.insertAdjacentHTML('afterbegin', `<h2>${esc(sel.name)} · หลังคลอด ${sel.days} วัน</h2>`);
-    d.insertAdjacentHTML('beforeend', `<button id="confirm" type="button" style="background:var(--brand);color:#fff;border:0;padding:8px 14px;border-radius:8px">${sel.confirmed ? '✅ บุคลากรรับทราบแล้ว' : 'บุคลากรรับทราบ/ยืนยันแผนการดูแล'}</button>`);
-    $('#confirm').onclick = () => { sel.confirmed = !sel.confirmed; renderDash(); };
-  }
-  renderDash();
-
-  // ---------- Herbal checker ----------
-  $('#herblist').innerHTML = herbs.DB.map(h => `<option value="${esc(h.name)}">`).join('');
+  // ---------- Herbal checker (ฐานข้อมูลจากผู้ดูแลระบบ; ถ้ายังไม่มีใช้ชุดตัวอย่าง) ----------
   $('#herbform').addEventListener('submit', e => {
     e.preventDefault();
     const f = e.target, profile = {};
@@ -190,10 +171,10 @@
     const icon = { ok: '✅', consult: '⚠️', avoid: '⛔' }[r.verdict];
     $('#herbres').innerHTML = `<h2>${esc(r.herb ? r.herb.name : $('#herbq').value || '—')}</h2><p><span class="badge ${cls}">${icon} ${r.th}</span></p>
       <ul class="reasons">${r.reasons.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
-      <p class="muted">ฐานข้อมูลตัวอย่างเพื่อสาธิต ต้องผ่านการตรวจสอบโดยผู้เชี่ยวชาญก่อนใช้จริง</p>`;
+      <p class="muted">ผลจากฐานข้อมูลที่ตรวจสอบโดยผู้เชี่ยวชาญ ไม่ใช่การวินิจฉัย — หากไม่แน่ใจโปรดปรึกษาเจ้าหน้าที่</p>`;
   });
 
-  // ---------- Follow-up timeline ----------
+  // ---------- Follow-up timeline + alerts ----------
   const FU = [
     [1, 'วันนี้มีเลือดออกมากผิดปกติหรือไม่?', ['ไม่มี → Green', 'มาก → Red แจ้งเตือนบุคลากรทันที']],
     [3, 'มีไข้หรือหนาวสั่นหรือไม่?', ['ไม่มี', 'มีไข้ → Orange']],
@@ -203,43 +184,70 @@
     [42, 'สุขภาพหลังคลอดกลับมาใกล้เคียงปกติหรือยัง?', ['ปกติแล้ว → ปิดเคส', 'ยังไม่ → นัดพบบุคลากร']],
   ];
   $('#timeline').innerHTML = `<div class="tl">${FU.map(([d, q, r]) => `<div class="d">Day ${d}</div><div class="bubble">${esc(q)}</div><div class="replies">${r.map(x => `<span>${esc(x)}</span>`).join('')}</div>`).join('')}</div>`;
+  function renderAlerts() {
+    const today = me ? me.days : 0, nextIdx = FU.findIndex(f => f[0] > today);
+    $('#alertlist').innerHTML = FU.map(([d, q], i) => `<div class="card al ${i === nextIdx ? 'next' : d <= today ? 'done' : ''}"><div class="n"><span>วัน<b>${d}</b></span></div><div><div>${esc(q)}</div>${d <= today ? '<small>✓ ถึงกำหนดแล้ว</small>' : i === nextIdx ? '<small style="color:var(--pink-d)">ถัดไป</small>' : ''}</div></div>`).join('');
+    const left = FU.filter(f => f[0] > today).length; $('#dot').textContent = left || ''; $('#dot').hidden = !left;
+  }
 
-  // ---------- กราฟความเสี่ยง + ประวัติ (ข้อมูลตัวอย่างที่ผ่าน Risk Engine) ----------
+  // ---------- Risk chart + history (จากผลประเมินที่บันทึกจริง) ----------
   const COLS = [[1, ['วันคลอด', '(วันที่ 1)'], ['คลอด']], [2, ['2']], [3, ['3']], [4, ['4']], [5, ['5']], [6, ['6']], [7, ['7']], [10, ['8–14', 'วัน'], ['8–14']],
     [17, ['สัปดาห์', 'ที่ 3'], ['ส.3']], [24, ['สัปดาห์', 'ที่ 4'], ['ส.4']], [31, ['สัปดาห์', 'ที่ 5'], ['ส.5']], [38, ['สัปดาห์', 'ที่ 6'], ['ส.6']]];
-  const OV = { 1: { bleeding: 'clots', pain: 5 }, 2: { pain: 5 }, 3: { pain: 2 }, 4: { pain: 4 }, 5: { pain: 7 }, 6: { milk: 'low' }, 7: { pain: 2 } };
-  const HIST = COLS.map(([d, l, sh]) => ({ day: d, label: l, short: sh, r: risk.assess({ ...base, days: d, ...(OV[d] || {}) }) }));
+  const colOf = (d) => d <= 7 ? Math.max(0, d - 1) : d <= 14 ? 7 : d <= 21 ? 8 : d <= 28 ? 9 : d <= 35 ? 10 : 11;
   const CCOL = { green: '#4caf7a', yellow: '#f2c230', orange: '#f08a3c', red: '#d62b45' };
-  const TODAY = 7;
   function chartSVG(wide) {
     const W = wide ? 330 : 258, H = wide ? 210 : 214, L = wide ? 52 : 46, R = 4, T = 6, B = wide ? 74 : 86, bands = ['red', 'orange', 'yellow', 'green'];
     const NAME = { red: 'รุนแรง', orange: 'เสี่ยง', yellow: 'ต้องติดตาม', green: 'ปกติ' };
     const bh = (H - T - B) / 4, cw = (W - L - R) / COLS.length, x = i => L + cw * (i + 0.5), y = rk => T + (3 - rk + 0.5) * bh;
+    const perCol = Array(COLS.length).fill(null);
+    for (const h of history) perCol[colOf(h.day)] = h;     // history is oldest → newest, so the latest in each column wins
     const bg = bands.map((l, i) => `<rect x="${L}" y="${T + i * bh}" width="${W - L - R}" height="${bh}" fill="${CCOL[l]}" opacity=".16"/><text x="${L - 4}" y="${T + i * bh + bh / 2 + 3}" text-anchor="end" font-size="8.5" fill="#8d7079">${NAME[l]}</text>`).join('');
     const grid = COLS.map((_, i) => `<line x1="${L + cw * i}" x2="${L + cw * i}" y1="${T}" y2="${H - B}" stroke="#fff" stroke-dasharray="2 3" opacity=".9"/>`).join('');
-    const pts = HIST.map((h, i) => [x(i), y(risk.LEVELS[h.r.level].rank)]);
-    const line = `<polyline points="${pts.map(q => q.join(',')).join(' ')}" fill="none" stroke="#c9a24b" stroke-width="1.8"/>`;
-    const dots = HIST.map((h, i) => `<circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="3.6" fill="${CCOL[h.r.level]}" stroke="#fff" stroke-width="1.2"/>`).join('');
-    const ti = COLS.findIndex(c => c[0] === TODAY), yl = H - B + 12;
-    const xl = HIST.map((h, i) => {
-      const hi = i === ti;
+    const rank = { green: 0, yellow: 1, orange: 2, red: 3 };
+    const pts = perCol.map((h, i) => h && [x(i), y(rank[h.level]), h.level]).filter(Boolean);
+    const line = pts.length > 1 ? `<polyline points="${pts.map(q => q[0] + ',' + q[1]).join(' ')}" fill="none" stroke="#c9a24b" stroke-width="1.8"/>` : '';
+    const dots = pts.map(q => `<circle cx="${q[0]}" cy="${q[1]}" r="3.8" fill="${CCOL[q[2]]}" stroke="#fff" stroke-width="1.2"/>`).join('');
+    const ti = colOf(me ? Math.max(1, me.days) : 1), yl = H - B + 12;
+    const xl = COLS.map(([, label, short], i) => {
+      const hi = i === ti, lab = wide ? label : (short || label);
       return (hi ? `<circle cx="${x(i)}" cy="${yl - 3}" r="8.5" fill="#ffd6de"/>` : '') +
-        (wide ? h.label : (h.short || h.label)).map((t, k) => `<text x="${x(i)}" y="${yl + k * 9}" text-anchor="middle" font-size="${t.length > 3 ? 7 : 8.5}" fill="${hi ? '#e0476a' : '#8d7079'}" font-weight="${hi ? 700 : 400}">${t}</text>`).join('');
+        lab.map((t, k) => `<text x="${x(i)}" y="${yl + k * 9}" text-anchor="middle" font-size="${t.length > 3 ? 7 : 8.5}" fill="${hi ? '#e0476a' : '#8d7079'}" font-weight="${hi ? 700 : 400}">${t}</text>`).join('');
     }).join('');
-    const bx1 = x(0) - cw / 2 + 2, bx2 = x(ti) + cw / 2 - 2, by = H - B + 36;
+    const bx1 = x(0) - cw / 2 + 2, bx2 = x(Math.min(6, ti)) + cw / 2 - 2, by = H - B + 36;
     const br = `<path d="M${bx1} ${by - 4}v4h${bx2 - bx1}v-4" fill="none" stroke="#f0607a" stroke-width="1"/><text x="${(bx1 + bx2) / 2}" y="${by + 9}" text-anchor="middle" font-size="10" fill="#f0607a">♥</text>` +
       `<text x="${(bx1 + bx2) / 2}" y="${by + 20}" text-anchor="middle" font-size="7.5" fill="#e0476a">ช่วงเริ่มต้น</text><text x="${(bx1 + bx2) / 2}" y="${by + 29}" text-anchor="middle" font-size="7.5" fill="#e0476a">กระตุ้นรับบริการฟื้นฟูหลังคลอด</text>`;
-    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟระดับความเสี่ยงตามวันหลังคลอด (ข้อมูลตัวอย่าง)">${bg}${grid}${line}${dots}${xl}${br}</svg>`;
+    const empty = pts.length ? '' : `<text x="${(L + W) / 2}" y="${T + (H - T - B) / 2}" text-anchor="middle" font-size="10" fill="#8d7079">ยังไม่มีผลประเมิน</text>`;
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟระดับความเสี่ยงตามวันหลังคลอด">${bg}${grid}${line}${dots}${empty}${xl}${br}</svg>`;
   }
-  $$('[data-chart]').forEach(el => el.innerHTML = chartSVG(el.dataset.chart === 'wide'));
-  $('#histlist').innerHTML = [...HIST].reverse().map(h => `<div class="hist"><span>${h.r.icon}</span><b>${h.r.level === 'green' ? 'ปกติ' : esc(h.r.reasons[0].text)}</b><small>วัน ${h.day}</small></div>`).join('');
+  const LV = { green: ['🟢', 'ปกติ'], yellow: ['🟡', 'ควรติดตาม'], orange: ['🟠', 'เสี่ยง'], red: ['🔴', 'ฉุกเฉิน'] };
+  async function loadHistory() {
+    history = await api('GET', '/api/patient/assessments');
+    $$('[data-chart]').forEach(el => el.innerHTML = chartSVG(el.dataset.chart === 'wide'));
+    $('#histlist').innerHTML = history.length ? [...history].reverse().map(h => `<div class="hist"><span>${LV[h.level][0]}</span><b>${h.level === 'green' ? 'ปกติ' : esc(h.reasons[0] || LV[h.level][1])}</b><small>วัน ${h.day}</small></div>`).join('') : '<p class="muted">ยังไม่มีประวัติ — ไปที่ “ติดตามและประเมินอาการ”</p>';
+  }
 
-  // ---------- แจ้งเตือน (ตัวอย่าง: วันนี้ = วันที่ 10) ----------
-  const nextIdx = FU.findIndex(f => f[0] > TODAY);
-  $('#alertlist').innerHTML = FU.map(([d, q], i) => `<div class="card al ${i === nextIdx ? 'next' : d <= TODAY ? 'done' : ''}"><div class="n"><span>วัน<b>${d}</b></span></div><div><div>${esc(q)}</div>${d <= TODAY ? '<small>✓ ตอบแล้ว</small>' : i === nextIdx ? '<small style="color:var(--pink-d)">ถัดไป</small>' : ''}</div></div>`).join('');
-  $('#dot').textContent = FU.filter(f => f[0] > TODAY).length || ''; if (!$('#dot').textContent) $('#dot').hidden = true;
+  // ---------- Knowledge ----------
+  function renderKnowledge() {
+    if (kb.herbs.length) herbs.DB = kb.herbs; else herbs.DB = herbs.BUILTIN;
+    $('#herblist').innerHTML = herbs.DB.map(h => `<option value="${esc(h.name)}">`).join('');
+    const V = { true: ['✅', 'เชื่อได้', 'b-green'], false: ['⛔', 'เชื่อไม่ได้', 'b-red'], unclear: ['⚠️', 'ไม่แน่ชัด', 'b-yellow'] };
+    $('#mythlist').innerHTML = kb.myths.map(m => `<details class="card kbi"><summary><b>${esc(m.title)}</b> <span class="badge ${V[m.verdict][2]}">${V[m.verdict][0]} ${V[m.verdict][1]}</span></summary><p>${esc(m.body)}</p></details>`).join('');
+    $('#liblist').innerHTML = kb.library.map(l => `<details class="card kbi"><summary><b>${esc(l.title)}</b>${l.category ? ` <span class="muted">${esc(l.category)}</span>` : ''}</summary><p>${esc(l.body)}</p></details>`).join('');
+    for (const [id, n] of [['tile-myths', kb.myths.length], ['tile-library', kb.library.length]]) {
+      const t = $('#' + id); t.classList.toggle('soon', !n); const em = $('em', t); if (em) em.hidden = !!n;
+    }
+  }
 
-  // ---------- ไมค์ น้องหมอท้อง (ใช้ได้เมื่อเบราว์เซอร์รองรับ Web Speech) ----------
+  // ---------- Profile ----------
+  const fmtDate = (d) => new Date(d + 'T00:00:00').toLocaleDateString('th-TH', { dateStyle: 'long' });
+  function renderProfile() {
+    $('#b-hn').textContent = me.hn; $('#b-name').textContent = me.name; $('#b-date').textContent = fmtDate(me.deliveryDate);
+    $('#b-days').textContent = me.days + ' วัน'; $('#b-mode').textContent = me.deliveryMode === 'cesarean' ? 'ผ่าตัดคลอด' : 'คลอดทางช่องคลอด';
+    $('#me-name').textContent = me.name; $('#me-sub').textContent = `HN ${me.hn} · หลังคลอด ${me.days} วัน · ${me.deliveryMode === 'cesarean' ? 'ผ่าตัดคลอด' : 'ทางช่องคลอด'}`;
+    form.elements.days.value = me.days; form.elements.delivery.value = me.deliveryMode;
+  }
+
+  // ---------- Mic (Web Speech, เมื่อเบราว์เซอร์รองรับ) ----------
   $('#mic').addEventListener('click', () => {
     location.hash = 'chat';
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -250,10 +258,17 @@
     rec.onend = rec.onerror = () => mic.classList.remove('live');
     try { rec.start(); } catch (_) { mic.classList.remove('live'); }
   });
-
   const mascot = $('#mascot');
   mascot.addEventListener('click', e => { if (!e.target.closest('#mic')) location.hash = 'chat'; });
   mascot.addEventListener('keydown', e => { if (e.key === 'Enter') location.hash = 'chat'; });
 
-  show(location.hash.slice(1));
+  // ---------- Boot ----------
+  async function startApp() {
+    me = await api('GET', '/api/patient/me');
+    [kb] = await Promise.all([api('GET', '/api/patient/knowledge'), loadHistory().catch(() => {})]);
+    login.hidden = true; $('#bottom').hidden = false;
+    renderProfile(); renderKnowledge(); renderAlerts(); rerun(); resetChat(); await loadHistory();
+    show(location.hash.slice(1));
+  }
+  api('GET', '/api/patient/me').then(startApp, () => showLogin());
 })();

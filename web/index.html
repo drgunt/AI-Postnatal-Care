@@ -13,6 +13,24 @@
 <body>
 <div id="app">
 
+  <!-- ========== เข้าสู่ระบบคนไข้ ========== -->
+  <section id="login" hidden>
+    <div class="lbox">
+      <img class="logo" src="img/logo.png" alt="">
+      <h1>หมอท้อง</h1>
+      <p class="sub">AI Thai Postnatal Care</p>
+      <form id="lform" autocomplete="off">
+        <label>HN<input name="hn" required maxlength="20" autocapitalize="characters" inputmode="text"></label>
+        <label>ชื่อของคุณ (บางส่วนก็ได้)<input name="namePart" required maxlength="60"></label>
+        <label>สแกนใบหน้า<input name="face" type="file" accept="image/*" capture="user" required></label>
+        <div class="row" style="margin:0 0 10px"><img id="lprev" class="lprev" hidden alt=""><span id="lstat" class="muted"></span></div>
+        <button class="primary" id="lbtn">เข้าสู่ระบบ</button>
+        <div id="lmsg" class="lmsg" role="alert"></div>
+      </form>
+      <p class="muted" style="text-align:center">ไม่มี HN หรือเข้าไม่ได้ กรุณาติดต่อเจ้าหน้าที่</p>
+    </div>
+  </section>
+
   <!-- ========== หน้าแรก ========== -->
   <section class="view on" id="v-home">
     <header class="hero">
@@ -54,8 +72,8 @@
       <button data-go="assess" style="--tb:#fef2f3"><img src="img/t2.png" alt=""><span>ติดตามและประเมินอาการหลังคลอด</span></button>
       <button data-go="follow" style="--tb:#fef7ef"><img src="img/t3.png" alt=""><span>หลักการดูแลหลังคลอด</span></button>
       <button data-go="herb" class="leaf" style="--tb:#f6f9ee"><img src="img/t4.png" alt=""><span>การใช้สมุนไพรให้ปลอดภัย</span></button>
-      <button class="soon" style="--tb:#faf0fb" data-soon><img src="img/t5.png" alt=""><span>คลังความรู้การผดุงครรภ์</span><em>เร็ว ๆ นี้</em></button>
-      <button class="soon" style="--tb:#fdf5ec" data-soon><img src="img/t6.png" alt=""><span>โบราณเชื่อได้ไหม</span><em>เร็ว ๆ นี้</em></button>
+      <button class="soon" id="tile-library" style="--tb:#faf0fb" data-go="library"><img src="img/t5.png" alt=""><span>คลังความรู้การผดุงครรภ์</span><em>เร็ว ๆ นี้</em></button>
+      <button class="soon" id="tile-myths" style="--tb:#fdf5ec" data-go="myths"><img src="img/t6.png" alt=""><span>โบราณเชื่อได้ไหม</span><em>เร็ว ๆ นี้</em></button>
     </div>
   </section>
 
@@ -63,15 +81,8 @@
   <section class="view" id="v-birth">
     <div class="topbar"><button class="back" data-go="home" aria-label="กลับ">‹</button><h2>ข้อมูลการคลอด</h2></div>
     <div class="card">
-      <dl class="kv">
-        <dt>วันคลอด</dt><dd>7 วันที่แล้ว (ตัวอย่าง)</dd>
-        <dt>วิธีคลอด</dt><dd>ทางช่องคลอด</dd>
-        <dt>ครรภ์ที่</dt><dd>1</dd>
-        <dt>อายุครรภ์ (GA)</dt><dd>39 สัปดาห์</dd>
-        <dt>ภาวะแทรกซ้อน</dt><dd>ไม่มี</dd>
-        <dt>โรคประจำตัว/ยา</dt><dd>ไม่มี</dd>
-      </dl>
-      <p class="muted">ข้อมูลตัวอย่าง — แก้ไขข้อมูลที่หน้า “ติดตามและประเมินอาการ”</p>
+      <dl class="kv"><dt>HN</dt><dd id="b-hn">-</dd><dt>ชื่อ</dt><dd id="b-name">-</dd><dt>วันคลอด</dt><dd id="b-date">-</dd><dt>หลังคลอด</dt><dd id="b-days">-</dd><dt>ลักษณะการคลอด</dt><dd id="b-mode">-</dd></dl>
+      <p class="muted">ข้อมูลนี้บันทึกโดยเจ้าหน้าที่ หากไม่ถูกต้องกรุณาแจ้งเจ้าหน้าที่</p>
     </div>
   </section>
 
@@ -81,8 +92,8 @@
     <div id="levelbar" class="levelbar"></div>
     <form id="form" class="card" autocomplete="off">
       <div class="row">
-        <label>วันหลังคลอด<input type="number" name="days" min="0" max="60" value="10" inputmode="numeric"></label>
-        <label>วิธีคลอด<select name="delivery"><option value="vaginal">ทางช่องคลอด</option><option value="cesarean">ผ่าตัดคลอด</option></select></label>
+        <label>วันหลังคลอด<input type="number" name="days" value="0" readonly></label>
+        <label>วิธีคลอด<select name="delivery" disabled><option value="vaginal">ทางช่องคลอด</option><option value="cesarean">ผ่าตัดคลอด</option></select></label>
       </div>
       <div class="row">
         <label>เลือดออก<select name="bleeding"><option value="normal">ปกติ</option><option value="clots">มีลิ่มเลือด</option><option value="heavy">มากผิดปกติ</option></select></label>
@@ -113,10 +124,9 @@
         <label class="ck"><input type="checkbox" name="engorgement"> คัดตึงเต้านม</label>
         <label class="ck"><input type="checkbox" name="hxPPH"> เคยตกเลือดหลังคลอด</label>
       </fieldset>
-      <div class="presets"><span>ลองตัวอย่าง</span>
-        <button type="button" data-preset="green">🟢</button><button type="button" data-preset="yellow">🟡</button><button type="button" data-preset="orange">🟠</button><button type="button" data-preset="red">🔴</button></div>
     </form>
     <div id="result" class="card"></div>
+    <button class="primary" id="saveAssess" type="button">บันทึกผลให้เจ้าหน้าที่</button><div id="saveMsg" class="muted" style="margin:8px 0 14px;text-align:center"></div>
   </section>
 
   <!-- ========== AI หมอท้อง ========== -->
@@ -154,17 +164,23 @@
     <div id="herbres" class="card"><p class="muted">กรอกชื่อแล้วกด “ตรวจสอบ”</p></div>
   </section>
 
-  <!-- ========== สำหรับบุคลากร ========== -->
-  <section class="view" id="v-dash">
-    <div class="topbar"><button class="back" data-go="home" aria-label="กลับ">‹</button><h2>สำหรับบุคลากร</h2></div>
-    <div id="dash"></div>
-  </section>
-
   <!-- ========== ประวัติการดูแล ========== -->
   <section class="view" id="v-history">
     <div class="topbar"><button class="back" data-go="home" aria-label="กลับ">‹</button><h2>ประวัติการดูแล</h2></div>
     <div class="card"><div class="chart" data-chart="wide"></div><p class="muted">ข้อมูลตัวอย่าง · ส. = สัปดาห์</p></div>
     <div class="card" id="histlist"></div>
+  </section>
+
+  <!-- ========== โบราณเชื่อได้ไหม ========== -->
+  <section class="view" id="v-myths">
+    <div class="topbar"><button class="back" data-go="home" aria-label="กลับ">‹</button><h2>โบราณเชื่อได้ไหม</h2></div>
+    <div id="mythlist"></div>
+  </section>
+
+  <!-- ========== คลังความรู้ ========== -->
+  <section class="view" id="v-library">
+    <div class="topbar"><button class="back" data-go="home" aria-label="กลับ">‹</button><h2>คลังความรู้การผดุงครรภ์</h2></div>
+    <div id="liblist"></div>
   </section>
 
   <!-- ========== แจ้งเตือน ========== -->
@@ -178,11 +194,11 @@
     <div class="topbar"><button class="back" data-go="home" aria-label="กลับ">‹</button><h2>บัญชีของฉัน</h2></div>
     <div class="card me">
       <div class="avatar">🤱</div>
-      <b>คุณแม่ตัวอย่าง</b>
-      <span class="muted">หลังคลอด 7 วัน · คลอดทางช่องคลอด</span>
+      <b id="me-name">-</b>
+      <span class="muted" id="me-sub">-</span>
     </div>
-    <button class="primary" data-go="dash" style="margin-bottom:14px">📊 สำหรับบุคลากร (Dashboard)</button>
-    <div class="card"><p class="muted">ข้อมูลทั้งหมดเป็นข้อมูลสมมติ ไม่มีการส่งออกจากเบราว์เซอร์<br>AI แนะนำ — บุคลากรตัดสินใจ</p></div>
+    <button class="primary" id="logout" type="button">ออกจากระบบ</button>
+    <div class="card" style="margin-top:14px"><p class="muted">AI แนะนำ — บุคลากรตัดสินใจ<br>ข้อมูลของคุณถูกเก็บอย่างปลอดภัยและเจ้าหน้าที่ที่เกี่ยวข้องเท่านั้นที่เข้าถึงได้</p></div>
   </section>
 
   <nav id="bottom">
@@ -195,6 +211,7 @@
 <script src="risk-engine.js"></script>
 <script src="ttm.js"></script>
 <script src="herbs.js"></script>
+<script src="face.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -147,3 +147,18 @@ tr.pt td[data-l="วันหลังคลอด"]::before{content:"หลั�
 .kv{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;margin:0 0 8px}.kv dt{color:var(--mute);font-size:.85rem}.kv dd{margin:0;font-weight:500}
 .alertcard{border-color:#f5b8c0;background:#fff5f6}.alertcard h2{color:var(--red);font-size:.95rem}
 @media (hover:hover){.tiles button:hover{transform:translateY(-2px)}}
+
+/* ---------- Login / knowledge ---------- */
+[hidden]{display:none!important}
+#login{position:fixed;inset:0;z-index:60;overflow-y:auto;background:radial-gradient(500px 300px at 90% 0,rgba(246,230,170,.5),transparent 70%),radial-gradient(500px 400px at 0 100%,rgba(255,205,215,.7),transparent 70%),var(--bg);padding:max(18px,env(safe-area-inset-top)) 18px 24px}
+.lbox{max-width:400px;margin:0 auto;text-align:center}
+.lbox .logo{width:84px;margin:6px auto 0;display:block}
+.lbox h1{font-size:2.2rem;background:linear-gradient(135deg,var(--pink),var(--pink-d) 50%,var(--gold-d));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lbox .sub{margin-bottom:16px}
+.lbox form{text-align:left;background:#fff;border:1.5px solid var(--gold-l);border-radius:var(--r);padding:16px;box-shadow:var(--shadow);margin-bottom:14px}
+.lprev{width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid var(--gold-l)}
+.okt{color:#2e7d4f;font-size:.82rem}.errt{color:var(--red);font-size:.82rem}
+.lmsg{color:var(--red);font-size:.88rem;margin-top:10px;min-height:1.2em;text-align:center}
+.kbi{padding:12px 14px}.kbi summary{cursor:pointer;list-style:none}.kbi summary::-webkit-details-marker{display:none}
+.kbi p{margin:8px 0 0;white-space:pre-wrap;font-size:.92rem}
+input[type=file]{padding:8px;min-height:46px;background:#fffafb}
