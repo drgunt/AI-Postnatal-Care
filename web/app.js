@@ -5,12 +5,21 @@
   const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const badge = (r) => `<span class="badge b-${r.level}">${r.icon} ${r.label} · ${r.th}</span>`;
 
-  // ---------- Tabs ----------
-  $$('#tabs button').forEach(b => b.addEventListener('click', () => {
-    $$('#tabs button').forEach(x => x.classList.toggle('on', x === b));
-    $$('main > section').forEach(s => s.hidden = s.id !== 'tab-' + b.dataset.tab);
+  // ---------- Router (หน้าแรก + หน้าย่อย, รองรับปุ่ม Back ของเบราว์เซอร์) ----------
+  const VIEWS = ['home', 'assess', 'chat', 'follow', 'herb', 'dash', 'history', 'alerts', 'me'];
+  const NAV = ['home', 'history', 'alerts', 'me'];
+  function show(name) {
+    if (!VIEWS.includes(name)) name = 'home';
+    $$('.view').forEach(v => v.classList.toggle('on', v.id === 'v-' + name));
+    $$('#bottom button').forEach(b => b.classList.toggle('on', b.dataset.nav === (NAV.includes(name) ? name : 'home')));
     window.scrollTo(0, 0);
-  }));
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-go]'); if (!b) return;
+    const to = b.dataset.go;
+    if (location.hash.slice(1) === to || (to === 'home' && !location.hash)) show(to); else location.hash = to === 'home' ? '' : to;
+  });
+  window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 
   // ---------- Assessment ----------
   const STATUS = { consider: 'พิจารณาได้ (รอยืนยัน)', defer: 'ยังไม่ถึงช่วงที่พิจารณา', avoid: 'ไม่แนะนำ/มีข้อห้าม' };
@@ -26,20 +35,25 @@
     const r = risk.assess(a), t = ttm.recommend(a, r);
     const missing = r.missing.length ? `<p class="muted">ข้อมูลที่ยังไม่ได้กรอก: ${r.missing.join(', ')}</p>` : '';
     target.innerHTML = `
-      <h2>ผลการคัดกรองโดย AI Risk Engine</h2>
+      <h2>ผลประเมิน</h2>
       <p>${badge(r)}</p>
       <ul class="reasons">${r.reasons.map(x => `<li>${esc(x.text)}</li>`).join('')}</ul>
       <p><b>แนวทาง:</b> ${esc(r.action)}</p>
       ${r.level === 'red' ? '<div class="alert">🚨 โทร <b>1669</b> หรือไปโรงพยาบาลที่ใกล้ที่สุดทันที — ระบบหยุดให้คำแนะนำทั่วไป</div>' : ''}
       ${a.selfHarm ? '<div class="alert">สายด่วนสุขภาพจิต <b>1323</b> (24 ชม.)</div>' : ''}
       ${missing}
-      <h2 style="margin-top:16px">AI Thai Traditional Medicine Decision Support</h2>
+      <h2 style="margin-top:16px">แนวทางแพทย์แผนไทย</h2>
       <p class="muted">${esc(t.message)}</p>
       ${t.items.map(i => `<div class="item ${i.status}"><b>${esc(i.name)}</b> — ${STATUS[i.status]}<ul>${i.why.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>`).join('')}
-      <p class="muted">⚠️ AI ไม่อนุมัติหัตถการโดยอัตโนมัติ — แพทย์/แพทย์แผนไทยเป็นผู้ยืนยัน · ค่าช่วงวันหลังคลอดเป็นตัวอย่างที่ต้องกำหนดโดยสถานบริการ</p>`;
+      <p class="muted">AI แนะนำ — แพทย์/แพทย์แผนไทยเป็นผู้ยืนยันก่อนทำหัตถการ</p>`;
   }
   const form = $('#form'), result = $('#result');
-  const rerun = () => renderResult(readForm(form), result);
+  const rerun = () => {
+    const a = readForm(form);
+    renderResult(a, result);
+    const r = risk.assess(a);
+    $('#levelbar').innerHTML = `${badge(r)}<small>${esc(r.reasons[0].text)}</small>`;
+  };
   form.addEventListener('input', rerun); form.addEventListener('change', rerun);
   const PRESETS = {
     green:  {},
@@ -75,7 +89,7 @@
   const say = (t, who = 'bot') => { const d = document.createElement('div'); d.className = 'msg ' + who; d.textContent = t; log.appendChild(d); log.scrollTop = log.scrollHeight; return d; };
   function resetChat() {
     ans = { days: 10, delivery: 'vaginal', bleeding: 'normal', tempC: 36.8, pain: 0, milk: 'enough' }; step = 0; pending = null; log.innerHTML = ''; quick.innerHTML = '';
-    say('สวัสดีค่ะ ดิฉันคือ AI หมอท้อง 🤱 ดิฉันไม่ใช่แพทย์ แต่จะช่วยคัดกรองและแนะนำว่าเมื่อใดควรพบบุคลากร\nพิมพ์อาการของคุณได้เลย เช่น “หลังคลอด 10 วัน ปวดหลังมาก”');
+    say('สวัสดีค่ะ น้องหมอท้องเอง 🤱 ไม่ใช่แพทย์ แต่ช่วยคัดกรองและบอกได้ว่าเมื่อไรควรพบบุคลากร\nเล่าอาการได้เลย เช่น “หลังคลอด 10 วัน ปวดหลังมาก”');
   }
   function parseFree(text) {
     const m = text.match(/(\d+)\s*วัน/); if (m) ans.days = Number(m[1]);
@@ -151,7 +165,7 @@
     const cnt = (l) => PATIENTS.filter(p => p.risk.level === l).length;
     $('#dash').innerHTML = `
       <div class="stats">${order.map(l => `<div class="stat ${COLORS[l]}"><b>${cnt(l)}</b>${risk.LEVELS[l].icon} ${GROUP[l]}</div>`).join('')}</div>
-      <div class="grid2"><div class="card"><h2>เรียงตามความเสี่ยง — จัดการคนที่เสี่ยงก่อน</h2>
+      <div class="grid2"><div class="card"><h2>เรียงตามความเสี่ยง</h2>
         <table><tr><th>ระดับ</th><th>รหัส</th><th>วันหลังคลอด</th><th>สาเหตุหลัก</th></tr>
         ${sorted.map(p => `<tr class="pt" data-id="${p.id}"><td data-l="ระดับ">${risk.LEVELS[p.risk.level].icon}</td><td data-l="ผู้รับบริการ">${esc(p.name)}</td><td data-l="วันหลังคลอด">${p.days}</td><td data-l="สาเหตุหลัก">${esc(p.risk.reasons[0].text)}${p.confirmed ? ' ✅' : ''}</td></tr>`).join('')}</table>
         <p class="muted">ข้อมูลสมมติ ไม่ใช่ผู้ป่วยจริง</p></div>
@@ -189,4 +203,43 @@
     [42, 'สุขภาพหลังคลอดกลับมาใกล้เคียงปกติหรือยัง?', ['ปกติแล้ว → ปิดเคส', 'ยังไม่ → นัดพบบุคลากร']],
   ];
   $('#timeline').innerHTML = `<div class="tl">${FU.map(([d, q, r]) => `<div class="d">Day ${d}</div><div class="bubble">${esc(q)}</div><div class="replies">${r.map(x => `<span>${esc(x)}</span>`).join('')}</div>`).join('')}</div>`;
+
+  // ---------- กราฟความเสี่ยง + ประวัติ (ข้อมูลตัวอย่างที่ผ่าน Risk Engine) ----------
+  const HIST = [
+    [1, { bleeding: 'clots', pain: 5 }], [2, { pain: 5 }], [3, { pain: 2 }], [4, { pain: 4 }], [5, { pain: 7 }],
+    [6, { milk: 'low' }], [7, { pain: 2 }], [10, { pain: 2 }], [14, { pain: 1 }], [21, {}], [28, {}], [35, {}], [42, {}],
+  ].map(([d, o]) => ({ day: d, r: risk.assess({ ...base, days: d, ...o }) }));
+  const CCOL = { green: '#4caf7a', yellow: '#f2c230', orange: '#f08a3c', red: '#d62b45' };
+  function chartSVG() {
+    const W = 320, H = 168, L = 56, R = 14, SHORT = { red: 'ฉุกเฉิน', orange: 'เสี่ยง', yellow: 'ติดตาม', green: 'ปกติ' }, T = 8, B = 28, bands = ['red', 'orange', 'yellow', 'green'];
+    const bh = (H - T - B) / 4, x = d => L + (d - 1) / 41 * (W - L - R), y = rk => T + (3 - rk + 0.5) * bh;
+    const bg = bands.map((l, i) => `<rect x="${L}" y="${T + i * bh}" width="${W - L - R}" height="${bh}" fill="${CCOL[l]}" opacity=".16"/><text x="${L - 6}" y="${T + i * bh + bh / 2 + 4}" text-anchor="end" font-size="10" fill="#8d7079">${SHORT[l]}</text>`).join('');
+    const pts = HIST.map(h => [x(h.day), y(risk.LEVELS[h.r.level].rank)]);
+    const line = `<polyline points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="#c9a24b" stroke-width="2"/>`;
+    const dots = HIST.map((h, i) => `<circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="4.5" fill="${CCOL[h.r.level]}" stroke="#fff" stroke-width="1.5"/>`).join('');
+    const xl = [1, 7, 14, 28, 42].map(d => `<text x="${d === 42 ? W - 2 : x(d)}" y="${H - 8}" text-anchor="${d === 42 ? 'end' : 'middle'}" font-size="10" fill="#8d7079">${d === 42 ? 'สัปดาห์ 6' : 'วัน ' + d}</text>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟระดับความเสี่ยงตามวันหลังคลอด (ข้อมูลตัวอย่าง)">${bg}${line}${dots}${xl}</svg>`;
+  }
+  $$('[data-chart]').forEach(el => el.innerHTML = chartSVG());
+  $('#histlist').innerHTML = [...HIST].reverse().map(h => `<div class="hist"><span>${h.r.icon}</span><b>${h.r.level === 'green' ? 'ปกติ' : esc(h.r.reasons[0].text)}</b><small>วัน ${h.day}</small></div>`).join('');
+
+  // ---------- แจ้งเตือน (ตัวอย่าง: วันนี้ = วันที่ 10) ----------
+  const TODAY = 10;
+  const nextIdx = FU.findIndex(f => f[0] > TODAY);
+  $('#alertlist').innerHTML = FU.map(([d, q], i) => `<div class="card al ${i === nextIdx ? 'next' : d <= TODAY ? 'done' : ''}"><div class="n"><span>วัน<b>${d}</b></span></div><div><div>${esc(q)}</div>${d <= TODAY ? '<small>✓ ตอบแล้ว</small>' : i === nextIdx ? '<small style="color:var(--pink-d)">ถัดไป</small>' : ''}</div></div>`).join('');
+  $('#dot').textContent = FU.filter(f => f[0] > TODAY).length ? '1' : ''; if (!$('#dot').textContent) $('#dot').hidden = true;
+
+  // ---------- ไมค์ น้องหมอท้อง (ใช้ได้เมื่อเบราว์เซอร์รองรับ Web Speech) ----------
+  $('#mic').addEventListener('click', () => {
+    location.hash = 'chat';
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { $('#chatin').focus(); return; }
+    const rec = new SR(); rec.lang = 'th-TH'; rec.interimResults = false;
+    const mic = $('#mic'); mic.classList.add('live');
+    rec.onresult = ev => { $('#chatin').value = ev.results[0][0].transcript; $('#chatform').requestSubmit(); };
+    rec.onend = rec.onerror = () => mic.classList.remove('live');
+    try { rec.start(); } catch (_) { mic.classList.remove('live'); }
+  });
+
+  show(location.hash.slice(1));
 })();
